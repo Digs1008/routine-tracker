@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Routine Tracker</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg-primary: #ffffff; --bg-secondary: #f5f5f2; --bg-tertiary: #efefeb;
+  --text-primary: #1a1a18; --text-secondary: #6b6b66; --text-tertiary: #9e9e98;
+  --border: rgba(0,0,0,0.12); --border-md: rgba(0,0,0,0.2);
+  --radius-md: 8px; --radius-lg: 12px;
+  --teal: #1D9E75; --teal-light: #E1F5EE; --teal-dark: #085041;
+  --amber: #BA7517; --amber-light: #FAEEDA; --amber-dark: #633806;
+  --red: #E24B4A; --red-light: #FCEBEB;
+  --purple: #534AB7; --purple-light: #EEEDFE;
+  --blue: #185FA5; --blue-light: #E6F1FB;
+  --coral: #D85A30; --coral-light: #FAECE7;
+  --green: #3B6D11; --green-light: #EAF3DE;
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-primary: #1c1c1a; --bg-secondary: #252523; --bg-tertiary: #2e2e2b;
+    --text-primary: #f0f0ec; --text-secondary: #a0a09a; --text-tertiary: #6e6e68;
+    --border: rgba(255,255,255,0.1); --border-md: rgba(255,255,255,0.18);
+    --teal-light: #0a2a1e; --teal-dark: #5DCAA5;
+    --amber-light: #2a1e04; --amber-dark: #FAC775;
+    --red-light: #2a0a0a; --purple-light: #1a1840;
+    --blue-light: #0a1a30; --coral-light: #2a1008; --green-light: #0a1a04;
+  }
+}
+html, body { height: 100%; font-family: var(--font); background: var(--bg-tertiary); color: var(--text-primary); }
+
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 20px; border-bottom: 0.5px solid var(--border);
+  background: var(--bg-primary); position: sticky; top: 0; z-index: 100;
+}
+.topbar-title { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.topbar-title i { color: var(--teal); }
+.nav-tabs { display: flex; gap: 4px; }
+.nav-tab {
+  padding: 6px 14px; border-radius: var(--radius-md); font-size: 13px;
+  cursor: pointer; border: none; background: transparent;
+  color: var(--text-secondary); transition: all 0.15s; display: flex; align-items: center; gap: 5px;
+}
+.nav-tab.active { background: var(--teal-light); color: var(--teal-dark); font-weight: 500; }
+.nav-tab:hover:not(.active) { background: var(--bg-secondary); }
+
+.view { display: none; padding: 20px; max-width: 900px; margin: 0 auto; width: 100%; }
+.view.active { display: block; }
+
+/* Date bar */
+.date-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.date-label { font-size: 15px; font-weight: 500; }
+.date-nav { display: flex; gap: 6px; align-items: center; }
+.date-nav button {
+  width: 30px; height: 30px; border-radius: var(--radius-md);
+  border: 0.5px solid var(--border); background: var(--bg-primary);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  font-size: 14px; color: var(--text-secondary); transition: all 0.15s;
+}
+.date-nav button:hover { background: var(--bg-secondary); }
+.today-btn {
+  padding: 5px 12px; border-radius: var(--radius-md);
+  border: 0.5px solid var(--border); background: var(--bg-primary);
+  font-size: 12px; cursor: pointer; color: var(--text-secondary);
+}
+.today-btn:hover { background: var(--bg-secondary); }
+
+/* Metrics */
+.metrics-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+.metric-card { background: var(--bg-secondary); border-radius: var(--radius-md); padding: 12px 14px; text-align: center; }
+.metric-card .label { font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+.metric-card .value { font-size: 24px; font-weight: 600; }
+.value.green { color: var(--teal); } .value.amber { color: var(--amber); } .value.red { color: var(--red); }
+
+/* Banners */
+.flag-banner {
+  background: var(--amber-light); border: 0.5px solid #FAC775;
+  border-radius: var(--radius-md); padding: 10px 14px; margin-bottom: 10px;
+  display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--amber-dark); line-height: 1.5;
+}
+.reminder-banner {
+  background: var(--blue-light); border: 0.5px solid #B5D4F4;
+  border-radius: var(--radius-md); padding: 10px 14px; margin-bottom: 10px;
+  font-size: 13px; color: var(--blue); display: flex; align-items: center; gap: 8px;
+}
+
+/* Category filter */
+.cat-filter { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.cat-btn {
+  padding: 4px 12px; border-radius: 20px; font-size: 12px;
+  cursor: pointer; border: 0.5px solid var(--border); background: transparent; color: var(--text-secondary); transition: all 0.15s;
+}
+.cat-btn.active { background: var(--teal-light); color: var(--teal-dark); border-color: var(--teal); }
+.cat-btn:hover:not(.active) { background: var(--bg-secondary); }
+
+/* Routine items */
+.routine-list { display: flex; flex-direction: column; gap: 6px; }
+.routine-item {
+  background: var(--bg-primary); border: 0.5px solid var(--border);
+  border-radius: var(--radius-md); padding: 11px 14px;
+  display: flex; align-items: center; gap: 10px; transition: all 0.15s;
+}
+.routine-item:hover { border-color: var(--border-md); }
+.routine-item.completed { opacity: 0.5; }
+.routine-item.completed .item-name { text-decoration: line-through; }
+.routine-item.skipped-flag { border-left: 3px solid var(--amber); }
+.routine-item.overdue-item { border-left: 3px solid var(--red); }
+
+.item-check {
+  width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--border-md);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; cursor: pointer; transition: all 0.15s;
+}
+.item-check:hover { border-color: var(--teal); }
+.item-check.done { background: var(--teal); border-color: var(--teal); color: white; }
+
+.item-body { flex: 1; min-width: 0; }
+.item-name { font-size: 14px; font-weight: 500; }
+.item-meta { font-size: 12px; color: var(--text-secondary); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 3px; }
+
+.item-cat { font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: 500; }
+.cat-health   { background: var(--teal-light);   color: var(--teal-dark); }
+.cat-work     { background: var(--blue-light);    color: var(--blue); }
+.cat-personal { background: var(--purple-light);  color: var(--purple); }
+.cat-fitness  { background: var(--coral-light);   color: var(--coral); }
+.cat-meal     { background: var(--amber-light);   color: var(--amber-dark); }
+.cat-learning { background: var(--green-light);   color: var(--green); }
+
+.goal-tag   { font-size: 11px; padding: 2px 8px; border-radius: 20px; background: var(--green-light); color: var(--green); font-weight: 500; }
+.skip-flag  { font-size: 11px; color: var(--amber); display: flex; align-items: center; gap: 3px; }
+.missed-tag { font-size: 11px; padding: 2px 8px; border-radius: 20px; background: var(--red-light); color: var(--red); font-weight: 500; }
+
+.item-actions button {
+  width: 28px; height: 28px; border-radius: var(--radius-md);
+  border: 0.5px solid var(--border); background: transparent;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  font-size: 14px; color: var(--text-secondary); transition: all 0.15s;
+}
+.item-actions button:hover { background: var(--bg-secondary); }
+.item-actions button.del:hover { background: var(--red-light); color: var(--red); border-color: var(--red); }
+
+.time-group { margin-bottom: 16px; }
+.time-group-header { font-size: 11px; color: var(--text-tertiary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.7px; margin-bottom: 7px; padding-left: 2px; }
+
+.empty-state { text-align: center; padding: 48px 16px; color: var(--text-secondary); }
+.empty-state i { font-size: 36px; display: block; margin-bottom: 10px; }
+
+/* Add form */
+.show-add-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 10px 16px; border-radius: var(--radius-md);
+  border: 1.5px dashed var(--border-md); background: transparent;
+  font-size: 13px; cursor: pointer; color: var(--text-secondary); width: 100%; margin-bottom: 14px; transition: all 0.15s;
+}
+.show-add-btn:hover { background: var(--bg-secondary); color: var(--text-primary); border-color: var(--teal); }
+.add-form { background: var(--bg-secondary); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 16px; border: 0.5px solid var(--border); }
+.add-form h3 { font-size: 14px; font-weight: 600; margin-bottom: 14px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.form-row.triple { grid-template-columns: 1fr 1fr 1fr; }
+.form-row.full { grid-template-columns: 1fr; }
+.form-group label { font-size: 12px; color: var(--text-secondary); display: block; margin-bottom: 4px; }
+.form-group input, .form-group select {
+  width: 100%; padding: 7px 10px; border-radius: var(--radius-md);
+  border: 0.5px solid var(--border-md); background: var(--bg-primary);
+  font-size: 13px; color: var(--text-primary); font-family: var(--font); transition: border-color 0.15s;
+}
+.form-group input:focus, .form-group select:focus { outline: none; border-color: var(--teal); }
+.form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+
+.btn {
+  padding: 7px 16px; border-radius: var(--radius-md);
+  border: 0.5px solid var(--border-md); background: transparent;
+  font-size: 13px; cursor: pointer; color: var(--text-primary); font-family: var(--font); transition: all 0.15s;
+}
+.btn:hover { background: var(--bg-secondary); }
+.btn.primary { background: var(--teal); color: white; border-color: var(--teal); }
+.btn.primary:hover { background: var(--teal-dark); }
+.btn.danger { background: var(--red); color: white; border-color: var(--red); }
+.btn.danger:hover { opacity: 0.85; }
+
+.section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; margin-top: 6px; }
+.section-title { font-size: 14px; font-weight: 600; }
+.section-badge { font-size: 11px; padding: 3px 10px; border-radius: 20px; background: var(--bg-secondary); color: var(--text-secondary); }
+
+/* Reports */
+.toggle-row { display: flex; gap: 6px; margin-bottom: 16px; }
+.toggle-btn {
+  padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 500;
+  cursor: pointer; border: 0.5px solid var(--border); background: var(--bg-primary); color: var(--text-secondary); transition: all 0.15s;
+}
+.toggle-btn.active { background: var(--teal); color: white; border-color: var(--teal); }
+.toggle-btn:hover:not(.active) { background: var(--bg-secondary); }
+
+.report-card { background: var(--bg-primary); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 14px; margin-bottom: 12px; }
+.report-card h4 { font-size: 11px; font-weight: 600; margin-bottom: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+.report-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+
+.streak-bar { display: flex; gap: 4px; flex-wrap: wrap; }
+.streak-day { width: 30px; height: 30px; border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; }
+.streak-day.s-full    { background: var(--teal); color: white; }
+.streak-day.s-partial { background: var(--amber-light); color: var(--amber-dark); }
+.streak-day.s-missed  { background: var(--bg-secondary); color: var(--text-tertiary); }
+.streak-day.s-today   { outline: 2px solid var(--teal); outline-offset: 1px; }
+
+.progress-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.progress-label { font-size: 12px; color: var(--text-secondary); width: 130px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.progress-bar-bg { flex: 1; height: 8px; background: var(--bg-secondary); border-radius: 4px; overflow: hidden; }
+.progress-bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
+.progress-pct { font-size: 12px; font-weight: 600; width: 36px; text-align: right; }
+
+/* Import */
+.upload-zone {
+  border: 2px dashed var(--border-md); border-radius: var(--radius-lg);
+  padding: 32px; text-align: center; cursor: pointer; margin-bottom: 14px;
+  transition: all 0.15s; background: var(--bg-secondary);
+}
+.upload-zone:hover, .upload-zone.drag { border-color: var(--teal); background: var(--teal-light); }
+.upload-zone i { font-size: 36px; color: var(--teal); display: block; margin-bottom: 10px; }
+.upload-zone .uz-title { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+.upload-zone .uz-hint { font-size: 12px; color: var(--text-secondary); }
+input[type="file"] { display: none; }
+
+.format-guide { background: var(--bg-secondary); border-radius: var(--radius-lg); padding: 16px; border: 0.5px solid var(--border); }
+.format-guide h4 { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+.guide-row { display: grid; grid-template-columns: 90px 1fr; gap: 8px; font-size: 13px; padding: 5px 0; border-bottom: 0.5px solid var(--border); }
+.guide-row:last-child { border: none; }
+.guide-col { font-weight: 600; color: var(--teal); }
+.guide-desc { color: var(--text-secondary); }
+
+@media (max-width: 600px) {
+  .metrics-row { grid-template-columns: repeat(2,1fr); }
+  .form-row.triple { grid-template-columns: 1fr 1fr; }
+  .report-grid { grid-template-columns: 1fr; }
+  .nav-tab span { display: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-title"><i class="ti ti-layout-dashboard"></i> routine tracker</div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showView('today')"><i class="ti ti-calendar-check"></i> <span>today</span></button>
+    <button class="nav-tab" onclick="showView('schedule')"><i class="ti ti-list"></i> <span>schedule</span></button>
+    <button class="nav-tab" onclick="showView('reports')"><i class="ti ti-chart-bar"></i> <span>reports</span></button>
+    <button class="nav-tab" onclick="showView('import')"><i class="ti ti-upload"></i> <span>import</span></button>
+  </div>
+</div>
+
+<!-- TODAY -->
+<div id="view-today" class="view active">
+  <div class="date-bar">
+    <div class="date-label" id="today-label"></div>
+    <div class="date-nav">
+      <button onclick="changeDay(-1)" title="previous"><i class="ti ti-chevron-left"></i></button>
+      <button class="today-btn" onclick="goToday()">today</button>
+      <button onclick="changeDay(1)" title="next"><i class="ti ti-chevron-right"></i></button>
+    </div>
+  </div>
+  <div class="metrics-row" id="metrics-row"></div>
+  <div id="flag-container"></div>
+  <div id="reminder-container"></div>
+  <div class="cat-filter" id="cat-filter"></div>
+  <div id="today-list"></div>
+  <div id="empty-today" class="empty-state" style="display:none">
+    <i class="ti ti-calendar-off"></i><p>no tasks for this day.</p>
+  </div>
+</div>
+
+<!-- SCHEDULE -->
+<div id="view-schedule" class="view">
+  <button class="show-add-btn" onclick="toggleAddForm()"><i class="ti ti-plus"></i> add routine item</button>
+  <div id="add-form-container" style="display:none">
+    <div class="add-form">
+      <h3>new routine item</h3>
+      <div class="form-row full"><div class="form-group">
+        <label>task name</label>
+        <input type="text" id="inp-name" placeholder="e.g. Morning meditation">
+      </div></div>
+      <div class="form-row triple">
+        <div class="form-group"><label>time</label><input type="time" id="inp-time" value="07:00"></div>
+        <div class="form-group"><label>duration (min)</label><input type="number" id="inp-dur" value="20" min="1"></div>
+        <div class="form-group"><label>category</label>
+          <select id="inp-cat">
+            <option value="health">health</option><option value="fitness">fitness</option>
+            <option value="work">work</option><option value="personal">personal</option>
+            <option value="meal">meal</option><option value="learning">learning</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row triple">
+        <div class="form-group"><label>days</label>
+          <select id="inp-days">
+            <option value="everyday">everyday</option>
+            <option value="weekday">weekdays only</option>
+            <option value="weekend">weekends only</option>
+            <option value="mon,wed,fri">mon / wed / fri</option>
+            <option value="tue,thu">tue / thu</option>
+          </select>
+        </div>
+        <div class="form-group"><label>goal / target</label><input type="text" id="inp-goal" placeholder="e.g. 10,000 steps"></div>
+        <div class="form-group"><label>remind before (min)</label><input type="number" id="inp-remind" value="5" min="0"></div>
+      </div>
+      <div class="form-actions">
+        <button class="btn" onclick="toggleAddForm()">cancel</button>
+        <button class="btn primary" onclick="addItem()"><i class="ti ti-plus"></i> add</button>
+      </div>
+    </div>
+  </div>
+  <div class="section-header">
+    <div class="section-title">your routine</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <div class="section-badge" id="routine-count"></div>
+      <button class="btn danger" onclick="clearAll()" style="font-size:12px;padding:4px 10px">
+        <i class="ti ti-trash"></i> clear all
+      </button>
+    </div>
+  </div>
+  <div id="schedule-list"></div>
+  <div id="empty-schedule" class="empty-state" style="display:none">
+    <i class="ti ti-clipboard-list"></i><p>no routine items yet.</p>
+  </div>
+</div>
+
+<!-- REPORTS -->
+<div id="view-reports" class="view">
+  <div class="toggle-row">
+    <button class="toggle-btn active" onclick="setReportPeriod('week',this)">this week</button>
+    <button class="toggle-btn" onclick="setReportPeriod('month',this)">this month</button>
+    <button class="toggle-btn" onclick="setReportPeriod('3month',this)">3 months</button>
+  </div>
+  <div class="metrics-row" id="report-metrics"></div>
+  <div class="report-card">
+    <h4>adherence over time</h4>
+    <div style="position:relative;width:100%;height:200px">
+      <canvas id="chart-adherence"></canvas>
+    </div>
+  </div>
+  <div class="report-grid">
+    <div class="report-card">
+      <h4>by category</h4>
+      <div style="position:relative;width:100%;height:200px"><canvas id="chart-cat"></canvas></div>
+    </div>
+    <div class="report-card">
+      <h4>28-day heatmap</h4>
+      <div class="streak-bar" id="streak-bar"></div>
+    </div>
+  </div>
+  <div class="report-card">
+    <h4>task completion rates</h4>
+    <div id="task-bars"></div>
+  </div>
+  <div class="report-card">
+    <h4>most skipped tasks</h4>
+    <div id="skipped-tasks"></div>
+  </div>
+</div>
+
+<!-- IMPORT -->
+<div id="view-import" class="view">
+  <div class="upload-zone" id="upload-zone"
+    onclick="document.getElementById('file-input').click()"
+    ondragover="event.preventDefault();this.classList.add('drag')"
+    ondragleave="this.classList.remove('drag')"
+    ondrop="handleDrop(event)">
+    <i class="ti ti-table-import"></i>
+    <div class="uz-title">click or drag & drop your Excel / CSV file</div>
+    <div class="uz-hint">supported: .xlsx, .xls, .csv</div>
+  </div>
+  <input type="file" id="file-input" accept=".xlsx,.xls,.csv" onchange="handleFileSelect(event)">
+  <div id="import-preview" style="display:none">
+    <div class="section-header">
+      <div class="section-title">preview</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn" onclick="cancelImport()">cancel</button>
+        <button class="btn primary" onclick="confirmImport()"><i class="ti ti-check"></i> import</button>
+      </div>
+    </div>
+    <div id="preview-list" class="routine-list"></div>
+  </div>
+  <div style="height:16px"></div>
+  <div class="format-guide">
+    <h4><i class="ti ti-info-circle" style="vertical-align:-2px;margin-right:4px"></i>expected column format</h4>
+    <div class="guide-row"><span class="guide-col">Name</span><span class="guide-desc">task name (required)</span></div>
+    <div class="guide-row"><span class="guide-col">Time</span><span class="guide-desc">e.g. 07:30</span></div>
+    <div class="guide-row"><span class="guide-col">Duration</span><span class="guide-desc">minutes (number)</span></div>
+    <div class="guide-row"><span class="guide-col">Category</span><span class="guide-desc">health / fitness / work / personal / meal / learning</span></div>
+    <div class="guide-row"><span class="guide-col">Days</span><span class="guide-desc">Everyday / Weekday / Weekend</span></div>
+    <div class="guide-row"><span class="guide-col">Goal</span><span class="guide-desc">optional target description</span></div>
+    <div class="guide-row"><span class="guide-col">Remind</span><span class="guide-desc">minutes before reminder (default 5)</span></div>
+  </div>
+</div>
+
+<script>
+// ─── Constants ───────────────────────────────────────────────────────────────
+const SHORTDAY = ['sun','mon','tue','wed','thu','fri','sat'];
+const MONTHS   = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const CAT_COLORS = { health:'#1D9E75', fitness:'#D85A30', work:'#185FA5', personal:'#534AB7', meal:'#BA7517', learning:'#3B6D11' };
+
+// ─── State ───────────────────────────────────────────────────────────────────
+let state = { items:[], completions:{}, currentDate:todayStr(), reportPeriod:'week', pendingImport:[], filterCat:'all' };
+
+// ─── Date helpers ─────────────────────────────────────────────────────────────
+function todayStr(){ const d=new Date(); return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate()); }
+function p2(n){ return n<10?'0'+n:''+n; }
+function parseDate(s){ const[y,m,d]=s.split('-'); return new Date(+y,+m-1,+d); }
+function addDays(s,n){ const d=parseDate(s); d.setDate(d.getDate()+n); return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate()); }
+function fmtDate(s){
+  const d=parseDate(s);
+  return ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getDay()]+', '+d.getDate()+' '+MONTHS[d.getMonth()]+' '+d.getFullYear();
+}
+
+// ─── KEY FIX: dayApplies – handles everyday/weekday/weekend + legacy formats ──
+function dayApplies(item, dateStr) {
+  const d   = parseDate(dateStr);
+  const dow = d.getDay(); // 0=Sun … 6=Sat
+  const raw = (item.days || 'everyday').toString().toLowerCase().trim();
+
+  if (raw === 'everyday' || raw === 'daily')      return true;
+  if (raw === 'weekday'  || raw === 'weekdays')   return dow >= 1 && dow <= 5;
+  if (raw === 'weekend'  || raw === 'weekends')   return dow === 0 || dow === 6;
+
+  // comma-separated short day list e.g. "mon,wed,fri"
+  const parts = raw.split(',').map(x => x.trim());
+  return parts.includes(SHORTDAY[dow]);
+}
+
+// ─── Persistence ─────────────────────────────────────────────────────────────
+function save(){ try{ localStorage.setItem('routineTrackerV2', JSON.stringify(state)); }catch(e){} }
+function load(){
+  try{
+    const s = localStorage.getItem('routineTrackerV2');
+    if(s){ const p=JSON.parse(s); state=Object.assign(state,p); }
+  }catch(e){}
+}
+
+// ─── Completion helpers ───────────────────────────────────────────────────────
+function ck(id,d){ return id+'__'+d; }
+function isCompleted(id,d){ return !!state.completions[ck(id,d)]; }
+function toggleComplete(id,d){
+  const k=ck(id,d);
+  if(state.completions[k]) delete state.completions[k]; else state.completions[k]=true;
+  save(); renderToday();
+}
+function wasSkippedYesterday(id,d){
+  const yest=addDays(d,-1);
+  const it=state.items.find(i=>i.id===id);
+  if(!it || !dayApplies(it,yest)) return false;
+  return !isCompleted(id,yest);
+}
+function getAdherence(d){
+  const items=state.items.filter(i=>dayApplies(i,d));
+  if(!items.length) return null;
+  return Math.round(items.filter(i=>isCompleted(i.id,d)).length / items.length * 100);
+}
+function calcStreak(){
+  let n=0, d=todayStr();
+  for(let i=0;i<365;i++){
+    const a=getAdherence(d);
+    if(a===null||a<50) break;
+    n++; d=addDays(d,-1);
+  }
+  return n;
+}
+
+// ─── View switching ───────────────────────────────────────────────────────────
+function showView(v){
+  document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(el=>el.classList.remove('active'));
+  document.getElementById('view-'+v).classList.add('active');
+  const idx=['today','schedule','reports','import'].indexOf(v);
+  document.querySelectorAll('.nav-tab')[idx].classList.add('active');
+  if(v==='today')    renderToday();
+  if(v==='schedule') renderSchedule();
+  if(v==='reports')  renderReports();
+}
+
+function changeDay(n){ state.currentDate=addDays(state.currentDate,n); save(); renderToday(); }
+function goToday(){ state.currentDate=todayStr(); save(); renderToday(); }
+
+// ─── Today render ─────────────────────────────────────────────────────────────
+function renderToday(){
+  const d = state.currentDate;
+  document.getElementById('today-label').textContent = fmtDate(d)+(d===todayStr()?' — today':'');
+
+  const allItems   = state.items.filter(i => dayApplies(i,d));
+  const filtered   = state.filterCat==='all' ? allItems : allItems.filter(i=>i.category===state.filterCat);
+  const done       = allItems.filter(i => isCompleted(i.id,d)).length;
+  const adh        = allItems.length ? Math.round(done/allItems.length*100) : 0;
+  const skippedYest= allItems.filter(i => wasSkippedYesterday(i.id,d) && !isCompleted(i.id,d));
+
+  const now    = new Date();
+  const nowMin = now.getHours()*60 + now.getMinutes();
+  const overdue = (d===todayStr())
+    ? allItems.filter(i => {
+        if(isCompleted(i.id,d)) return false;
+        const[h,m]=(i.time||'00:00').split(':').map(Number);
+        return h*60+m < nowMin;
+      })
+    : [];
+
+  // Metrics
+  document.getElementById('metrics-row').innerHTML = `
+    <div class="metric-card"><div class="label">tasks today</div><div class="value">${allItems.length}</div></div>
+    <div class="metric-card"><div class="label">done</div><div class="value green">${done}</div></div>
+    <div class="metric-card"><div class="label">remaining</div><div class="value ${allItems.length-done>0?'amber':''}">${allItems.length-done}</div></div>
+    <div class="metric-card"><div class="label">adherence</div><div class="value ${adh>=80?'green':adh>=50?'amber':'red'}">${adh}%</div></div>`;
+
+  // Banners
+  document.getElementById('flag-container').innerHTML = skippedYest.length
+    ? `<div class="flag-banner"><i class="ti ti-alert-triangle"></i><span><strong>${skippedYest.length} task${skippedYest.length>1?'s':''} skipped yesterday</strong> — don't miss again: ${skippedYest.map(i=>'<em>'+esc(i.name)+'</em>').join(', ')}</span></div>`
+    : '';
+  document.getElementById('reminder-container').innerHTML = overdue.length
+    ? `<div class="reminder-banner"><i class="ti ti-clock"></i><span><strong>${overdue.length} task${overdue.length>1?'s':''} overdue:</strong> ${overdue.map(i=>esc(i.name)).join(', ')}</span></div>`
+    : '';
+
+  // Category chips
+  const cats = [...new Set(state.items.map(i=>i.category))].sort();
+  document.getElementById('cat-filter').innerHTML =
+    `<button class="cat-btn ${state.filterCat==='all'?'active':''}" onclick="setCatFilter('all')">all</button>`
+    + cats.map(c=>`<button class="cat-btn ${state.filterCat===c?'active':''}" onclick="setCatFilter('${c}')">${c}</button>`).join('');
+
+  // List
+  const sorted = [...filtered].sort((a,b)=>(a.time||'').localeCompare(b.time||''));
+  const listEl = document.getElementById('today-list');
+  document.getElementById('empty-today').style.display = sorted.length?'none':'block';
+  if(!sorted.length){ listEl.innerHTML=''; return; }
+
+  // Group by time of day
+  const groups = {};
+  sorted.forEach(it=>{
+    const h = it.time ? parseInt(it.time.split(':')[0]) : 0;
+    const g = h<12 ? '🌅 morning' : h<17 ? '☀️ afternoon' : '🌙 evening';
+    if(!groups[g]) groups[g]=[];
+    groups[g].push(it);
+  });
+
+  listEl.innerHTML = Object.entries(groups).map(([grp,gi])=>`
+    <div class="time-group">
+      <div class="time-group-header">${grp}</div>
+      ${gi.map(it=>renderTodayItem(it,d,nowMin)).join('')}
+    </div>`).join('');
+}
+
+function renderTodayItem(it, d, nowMin){
+  const done    = isCompleted(it.id,d);
+  const skipped = wasSkippedYesterday(it.id,d) && !done;
+  const[ih,im]  = (it.time||'00:00').split(':').map(Number);
+  const od      = (d===todayStr()) && (ih*60+im < nowMin) && !done;
+  const dur     = it.duration ? it.duration+'m' : '';
+  return `<div class="routine-item ${done?'completed':''} ${skipped?'skipped-flag':''} ${od?'overdue-item':''}">
+    <div class="item-check ${done?'done':''}" onclick="toggleComplete('${it.id}','${d}')">
+      ${done?'<i class="ti ti-check"></i>':''}
+    </div>
+    <div class="item-body">
+      <div class="item-name">${esc(it.name)}</div>
+      <div class="item-meta">
+        <span style="display:flex;align-items:center;gap:3px"><i class="ti ti-clock" style="font-size:11px"></i>${it.time||'–'}${dur?' · '+dur:''}</span>
+        <span class="item-cat cat-${it.category||'personal'}">${it.category||'personal'}</span>
+        ${it.goal?`<span class="goal-tag" title="${esc(it.goal)}">🎯 ${esc(it.goal)}</span>`:''}
+        ${skipped?'<span class="skip-flag"><i class="ti ti-alert-triangle"></i> skipped yesterday</span>':''}
+        ${od?'<span class="missed-tag">overdue</span>':''}
+      </div>
+    </div>
+    <div class="item-actions">
+      <button onclick="toggleComplete('${it.id}','${d}')" title="${done?'undo':'mark done'}">
+        <i class="ti ti-${done?'rotate-clockwise':'circle-check'}"></i>
+      </button>
+    </div>
+  </div>`;
+}
+
+function setCatFilter(cat){ state.filterCat=cat; renderToday(); }
+
+// ─── Schedule render ──────────────────────────────────────────────────────────
+function renderSchedule(){
+  document.getElementById('routine-count').textContent = state.items.length+' items';
+  const listEl = document.getElementById('schedule-list');
+  document.getElementById('empty-schedule').style.display = state.items.length?'none':'block';
+  if(!state.items.length){ listEl.innerHTML=''; return; }
+
+  const sorted = [...state.items].sort((a,b)=>(a.time||'').localeCompare(b.time||''));
+  listEl.innerHTML = `<div class="routine-list">${sorted.map(it=>`
+    <div class="routine-item">
+      <div class="item-check" style="cursor:default"><i class="ti ti-grip-vertical" style="font-size:14px;color:var(--text-tertiary)"></i></div>
+      <div class="item-body">
+        <div class="item-name">${esc(it.name)}</div>
+        <div class="item-meta">
+          <span style="display:flex;align-items:center;gap:3px"><i class="ti ti-clock" style="font-size:11px"></i>${it.time||'–'}${it.duration?' · '+it.duration+'m':''}</span>
+          <span class="item-cat cat-${it.category||'personal'}">${it.category||'personal'}</span>
+          <span style="font-size:11px;color:var(--text-tertiary)">${it.days||'everyday'}</span>
+          ${it.goal?`<span class="goal-tag">🎯 ${esc(it.goal)}</span>`:''}
+          <span style="font-size:11px;color:var(--text-tertiary)"><i class="ti ti-bell" style="font-size:11px"></i> ${it.remind||5}m</span>
+        </div>
+      </div>
+      <div class="item-actions">
+        <button class="del" onclick="deleteItem('${it.id}')" title="delete"><i class="ti ti-trash"></i></button>
+      </div>
+    </div>`).join('')}</div>`;
+}
+
+function toggleAddForm(){
+  const f=document.getElementById('add-form-container');
+  f.style.display = f.style.display==='none' ? 'block' : 'none';
+}
+function addItem(){
+  const name=document.getElementById('inp-name').value.trim();
+  if(!name){ alert('please enter a task name'); return; }
+  state.items.push({
+    id: Date.now().toString(),
+    name,
+    time:     document.getElementById('inp-time').value,
+    duration: parseInt(document.getElementById('inp-dur').value)||20,
+    category: document.getElementById('inp-cat').value,
+    days:     document.getElementById('inp-days').value,
+    goal:     document.getElementById('inp-goal').value.trim(),
+    remind:   parseInt(document.getElementById('inp-remind').value)||5
+  });
+  save(); toggleAddForm();
+  document.getElementById('inp-name').value='';
+  document.getElementById('inp-goal').value='';
+  renderSchedule();
+}
+function deleteItem(id){
+  if(!confirm('delete this item?')) return;
+  state.items = state.items.filter(i=>i.id!==id); save(); renderSchedule();
+}
+function clearAll(){
+  if(!confirm('clear ALL routine items and completion history? this cannot be undone.')) return;
+  state.items=[]; state.completions={}; state.filterCat='all'; save();
+  renderSchedule(); renderToday();
+}
+
+// ─── Reports ──────────────────────────────────────────────────────────────────
+let charts = {};
+function renderReports(){
+  const today = todayStr();
+  const n = state.reportPeriod==='week'?7 : state.reportPeriod==='month'?30 : 90;
+  const days = Array.from({length:n},(_,i)=>addDays(today,-(n-1-i)));
+
+  const adDays = days.map(d=>({d,a:getAdherence(d)})).filter(x=>x.a!==null);
+  const avg    = adDays.length ? Math.round(adDays.reduce((s,x)=>s+x.a,0)/adDays.length) : 0;
+  const streak = calcStreak();
+  const best   = adDays.length ? adDays.reduce((b,x)=>x.a>b.a?x:b,adDays[0]) : null;
+
+  document.getElementById('report-metrics').innerHTML = `
+    <div class="metric-card"><div class="label">avg adherence</div><div class="value ${avg>=80?'green':avg>=50?'amber':'red'}">${avg}%</div></div>
+    <div class="metric-card"><div class="label">streak</div><div class="value green">${streak} days</div></div>
+    <div class="metric-card"><div class="label">tasks</div><div class="value">${state.items.length}</div></div>
+    <div class="metric-card"><div class="label">best day</div><div class="value green">${best?best.a+'%':'—'}</div></div>`;
+
+  // Heatmap (last 28 days)
+  const hm = Array.from({length:28},(_,i)=>addDays(today,-(27-i)));
+  document.getElementById('streak-bar').innerHTML = hm.map(d=>{
+    const a=getAdherence(d); const dd=parseDate(d).getDate();
+    const cls = a===null?'s-missed': a===100?'s-full': a>=50?'s-partial':'s-missed';
+    return `<div class="streak-day ${cls} ${d===today?'s-today':''}" title="${d}: ${a===null?'no tasks':a+'%'}">${dd}</div>`;
+  }).join('');
+
+  // Cat totals
+  const catTot={}, catDone={};
+  days.forEach(d=>{ state.items.filter(i=>dayApplies(i,d)).forEach(i=>{ const c=i.category||'personal'; catTot[c]=(catTot[c]||0)+1; if(isCompleted(i.id,d)) catDone[c]=(catDone[c]||0)+1; }); });
+
+  // Task stats
+  const taskStats = state.items.map(it=>{
+    let miss=0,tot=0;
+    days.forEach(d=>{ if(dayApplies(it,d)){ tot++; if(!isCompleted(it.id,d)) miss++; } });
+    return {name:it.name, miss, tot, pct: tot?Math.round((tot-miss)/tot*100):0};
+  });
+
+  document.getElementById('task-bars').innerHTML = taskStats.sort((a,b)=>b.pct-a.pct).map(t=>`
+    <div class="progress-row">
+      <div class="progress-label" title="${esc(t.name)}">${esc(t.name)}</div>
+      <div class="progress-bar-bg"><div class="progress-bar-fill" style="width:${t.pct}%;background:${t.pct>=80?'#1D9E75':t.pct>=50?'#BA7517':'#E24B4A'}"></div></div>
+      <div class="progress-pct" style="color:${t.pct>=80?'#1D9E75':t.pct>=50?'#BA7517':'#E24B4A'}">${t.pct}%</div>
+    </div>`).join('') || '<p style="font-size:13px;color:var(--text-secondary)">start completing tasks to see rates</p>';
+
+  document.getElementById('skipped-tasks').innerHTML = taskStats.filter(t=>t.tot>0).sort((a,b)=>b.miss-a.miss).slice(0,6).map(t=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:13px">
+      <span>${esc(t.name)}</span><span style="color:var(--red);font-weight:600">${t.miss} skipped</span>
+    </div>`).join('') || '<p style="font-size:13px;color:var(--text-secondary)">no data yet</p>';
+
+  // Destroy old charts
+  ['adherence','cat'].forEach(k=>{ if(charts[k]){ try{charts[k].destroy();}catch(e){} delete charts[k]; } });
+
+  // Adherence line chart
+  const ctx1 = document.getElementById('chart-adherence');
+  if(ctx1 && adDays.length){
+    charts['adherence'] = new Chart(ctx1, {
+      type:'line',
+      data:{ labels:adDays.map(x=>{ const d=parseDate(x.d); return d.getDate()+' '+MONTHS[d.getMonth()]; }),
+        datasets:[{ label:'adherence %', data:adDays.map(x=>x.a), borderColor:'#1D9E75', backgroundColor:'rgba(29,158,117,0.08)', tension:0.35, fill:true, pointRadius:3, pointBackgroundColor:'#1D9E75' }]},
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+        scales:{ y:{min:0,max:100,ticks:{callback:v=>v+'%',font:{size:11}},grid:{color:'rgba(128,128,128,0.1)'}}, x:{ticks:{maxTicksLimit:10,font:{size:11}},grid:{display:false}} } }
+    });
+  }
+
+  // Category doughnut
+  const cats = Object.keys(catTot).filter(c=>catTot[c]>0);
+  const ctx2 = document.getElementById('chart-cat');
+  if(ctx2 && cats.length){
+    charts['cat'] = new Chart(ctx2, {
+      type:'doughnut',
+      data:{ labels:cats, datasets:[{ data:cats.map(c=>catTot[c]?Math.round((catDone[c]||0)/catTot[c]*100):0), backgroundColor:cats.map(c=>CAT_COLORS[c]||'#888'), borderWidth:2, borderColor:'transparent' }]},
+      options:{ responsive:true, maintainAspectRatio:false, cutout:'58%', plugins:{legend:{position:'right',labels:{font:{size:11},boxWidth:10,padding:6}}} }
+    });
+  }
+}
+
+function setReportPeriod(p,btn){
+  state.reportPeriod=p;
+  document.querySelectorAll('.toggle-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); renderReports();
+}
+
+// ─── Import ───────────────────────────────────────────────────────────────────
+function handleFileSelect(e){ processFile(e.target.files[0]); }
+function handleDrop(e){ e.preventDefault(); document.getElementById('upload-zone').classList.remove('drag'); processFile(e.dataTransfer.files[0]); }
+
+function normaliseTime(raw){
+  if(!raw && raw!==0) return '';
+  if(typeof raw === 'number'){
+    // Excel serial fraction
+    const totalMin = Math.round(raw * 24 * 60);
+    return p2(Math.floor(totalMin/60))+':'+p2(totalMin%60);
+  }
+  const s = raw.toString().trim();
+  // already HH:MM
+  if(/^\d{1,2}:\d{2}/.test(s)) return s.substring(0,5);
+  return s;
+}
+
+function normaliseDays(raw){
+  if(!raw) return 'everyday';
+  const s = raw.toString().toLowerCase().trim();
+  if(s==='everyday' || s==='daily' || s==='every day') return 'everyday';
+  if(s==='weekday'  || s==='weekdays')                 return 'weekday';
+  if(s==='weekend'  || s==='weekends')                 return 'weekend';
+  return s; // pass through custom comma lists
+}
+
+function normaliseCategory(raw){
+  if(!raw) return 'personal';
+  return raw.toString().toLowerCase().trim();
+}
+
+function rowsToItems(header, data){
+  // flexible column finder
+  const fi = (...names) => {
+    for(const n of names){
+      const i = header.findIndex(h=>h.includes(n));
+      if(i>=0) return i;
+    }
+    return -1;
+  };
+  const ni=fi('name'), ti=fi('time'), di=fi('dur'), ci=fi('cat'), dayi=fi('day'), gi=fi('goal'), ri=fi('remind');
+
+  return data.map((r,idx)=>{
+    const name = (ni>=0 ? r[ni] : r[0] || '') .toString().trim();
+    if(!name) return null;
+    return {
+      id:       (Date.now()+Math.random()).toString(36),
+      name,
+      time:     normaliseTime(ti>=0 ? r[ti] : ''),
+      duration: di>=0 ? (parseInt(r[di])||20) : 20,
+      category: normaliseCategory(ci>=0 ? r[ci] : 'personal'),
+      days:     normaliseDays(dayi>=0 ? r[dayi] : 'everyday'),
+      goal:     gi>=0 ? (r[gi]||'').toString() : '',
+      remind:   ri>=0 ? (parseInt(r[ri])||5) : 5
+    };
+  }).filter(Boolean);
+}
+
+function processFile(file){
+  if(!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  if(ext==='csv'){
+    const r=new FileReader();
+    r.onload=e=>{
+      const rows=e.target.result.split('\n').map(r=>r.split(',').map(c=>c.trim().replace(/^"|"$/g,'')));
+      const header=rows[0].map(h=>h.toLowerCase());
+      showPreview(rowsToItems(header, rows.slice(1).filter(r=>r.length>1&&r[0])));
+    };
+    r.readAsText(file);
+  } else {
+    const r=new FileReader();
+    r.onload=e=>{
+      const wb=XLSX.read(e.target.result,{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true});
+      if(!rows.length) return;
+      const header=rows[0].map(h=>(h||'').toString().toLowerCase().trim());
+      showPreview(rowsToItems(header, rows.slice(1).filter(r=>r.length>0&&r[0])));
+    };
+    r.readAsArrayBuffer(file);
+  }
+}
+
+function showPreview(items){
+  state.pendingImport = items;
+  document.getElementById('preview-list').innerHTML = items.map(it=>`
+    <div class="routine-item">
+      <div class="item-check" style="cursor:default"><i class="ti ti-table" style="font-size:14px;color:var(--teal)"></i></div>
+      <div class="item-body">
+        <div class="item-name">${esc(it.name)}</div>
+        <div class="item-meta">
+          <span style="display:flex;align-items:center;gap:3px"><i class="ti ti-clock" style="font-size:11px"></i>${it.time||'–'} · ${it.duration}m</span>
+          <span class="item-cat cat-${it.category}">${it.category}</span>
+          <span style="font-size:11px;color:var(--text-tertiary)">${it.days}</span>
+          ${it.goal?`<span class="goal-tag">🎯 ${esc(it.goal)}</span>`:''}
+          <span style="font-size:11px;color:var(--text-tertiary)"><i class="ti ti-bell" style="font-size:11px"></i> ${it.remind}m</span>
+        </div>
+      </div>
+    </div>`).join('');
+  document.getElementById('import-preview').style.display = items.length?'block':'none';
+  if(!items.length) alert('no valid rows found. check the column format below.');
+}
+
+function confirmImport(){
+  state.items.push(...state.pendingImport);
+  state.pendingImport=[];
+  save();
+  document.getElementById('import-preview').style.display='none';
+  document.getElementById('file-input').value='';
+  alert('imported '+state.items.length+' total items.');
+  showView('schedule');
+}
+function cancelImport(){ state.pendingImport=[]; document.getElementById('import-preview').style.display='none'; }
+
+// ─── Reminders ────────────────────────────────────────────────────────────────
+function checkReminders(){
+  if(!('Notification' in window)||Notification.permission!=='granted') return;
+  const today=todayStr(); const now=new Date(); const nowMin=now.getHours()*60+now.getMinutes();
+  state.items.forEach(it=>{
+    if(!dayApplies(it,today)||isCompleted(it.id,today)||!it.time) return;
+    const[h,m]=it.time.split(':').map(Number);
+    const diff=h*60+m-nowMin;
+    const remind=it.remind||5;
+    if(diff>=0&&diff<=remind) new Notification('⏰ '+it.name,{body:'Scheduled for '+it.time+'. Time to get going!'});
+  });
+}
+
+// ─── Escape helper ────────────────────────────────────────────────────────────
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ─── YOUR DATA (seeded from Routine.xlsx) ─────────────────────────────────────
+const MY_ROUTINE = [
+  { id:'r01',  name:'Wake Up',      time:'07:00', duration:5,   category:'health',   days:'everyday', goal:'',                        remind:5 },
+  { id:'r02',  name:'School Drop',  time:'07:40', duration:20,  category:'personal', days:'weekday',  goal:'',                        remind:5 },
+  { id:'r03',  name:'Gym',          time:'08:00', duration:60,  category:'health',   days:'everyday', goal:'Body Fat should reach 20%',remind:10},
+  { id:'r04',  name:'Bath',         time:'09:00', duration:10,  category:'personal', days:'everyday', goal:'',                        remind:5 },
+  { id:'r05',  name:'Worship',      time:'09:10', duration:10,  category:'personal', days:'everyday', goal:'',                        remind:5 },
+  { id:'r06',  name:'Breakfast',    time:'09:20', duration:15,  category:'meal',     days:'everyday', goal:'',                        remind:5 },
+  { id:'r07',  name:'Commute',      time:'10:00', duration:60,  category:'work',     days:'weekday',  goal:'',                        remind:5 },
+  { id:'r08',  name:'Office',       time:'11:00', duration:600, category:'work',     days:'weekday',  goal:'',                        remind:5 },
+  { id:'r09',  name:'Commute Home', time:'21:00', duration:60,  category:'work',     days:'weekday',  goal:'',                        remind:5 },
+  { id:'r10',  name:'Dinner',       time:'22:00', duration:30,  category:'meal',     days:'everyday', goal:'',                        remind:5 },
+  { id:'r11',  name:'Family',       time:'22:30', duration:30,  category:'personal', days:'everyday', goal:'',                        remind:5 },
+  { id:'r12',  name:'Learning',     time:'23:00', duration:60,  category:'learning', days:'everyday', goal:'Complete AI course',       remind:10},
+  { id:'r13',  name:'Sleep',        time:'00:00', duration:420, category:'health',   days:'everyday', goal:'',                        remind:5 },
+  { id:'r14',  name:'Walk',         time:'11:00', duration:60,  category:'health',   days:'weekend',  goal:'10000 steps',              remind:10},
+  { id:'r15',  name:'Badminton',    time:'16:00', duration:120, category:'health',   days:'weekend',  goal:'',                        remind:15},
+  { id:'r16',  name:'Classes',      time:'19:00', duration:120, category:'learning', days:'weekend',  goal:'AI certification',         remind:10},
+];
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+load();
+
+// If no items yet (fresh start), seed with user's routine
+if(!state.items.length){
+  state.items = MY_ROUTINE;
+  save();
+}
+
+renderToday();
+if('Notification' in window && Notification.permission==='default') Notification.requestPermission();
+setInterval(checkReminders, 60000);
+</script>
+</body>
+</html>
