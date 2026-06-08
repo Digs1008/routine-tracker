@@ -15,7 +15,7 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getFirestore, doc, setDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 const FIREBASE_CONFIG = {
- apiKey: "AIzaSyBcJgURkeBthHabtHjq130U9SEeIpR4IU8",
+  apiKey: "AIzaSyBcJgURkeBthHabtHjq130U9SEeIpR4IU8",
   authDomain: "dig-routine-tracker.firebaseapp.com",
   projectId: "dig-routine-tracker",
   storageBucket: "dig-routine-tracker.firebasestorage.app",
@@ -33,11 +33,12 @@ if(FIREBASE_READY){
       state.items=r.items||state.items;
       state.completions=r.completions||state.completions;
       state.workLogs=r.workLogs||state.workLogs;
+      state.mealLogs=r.mealLogs||state.mealLogs;
       renderCurrent();
     }
   });
   window._saveToFirebase=async()=>{
-    try{ await setDoc(ref,{items:state.items,completions:state.completions,workLogs:state.workLogs,updatedAt:Date.now()}); }catch(e){}
+    try{ await setDoc(ref,{items:state.items,completions:state.completions,workLogs:state.workLogs,mealLogs:state.mealLogs,updatedAt:Date.now()}); }catch(e){}
   };
 } else { window._saveToFirebase=()=>{}; }
 </script>
@@ -216,10 +217,60 @@ input[type="file"]{display:none}
 .grow{display:grid;grid-template-columns:90px 1fr;gap:8px;font-size:13px;padding:5px 0;border-bottom:.5px solid var(--bdr)}
 .grow:last-child{border:none}.gcol{font-weight:600;color:var(--teal)}.gdesc{color:var(--txt2)}
 
+/* ── Meal Logger ── */
+.meal-type-tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.meal-tab{padding:5px 14px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:.5px solid var(--bdr);background:var(--bg);color:var(--txt2);transition:all .15s}
+.meal-tab.active{background:var(--amb);color:#fff;border-color:var(--amb)}
+.food-search-wrap{display:flex;gap:6px;margin-bottom:10px}
+.food-search-wrap input{flex:1;padding:9px 12px;border-radius:var(--r);border:.5px solid var(--bdrm);background:var(--bg);font-size:13px;color:var(--txt);font-family:var(--font)}
+.food-search-wrap input:focus{outline:none;border-color:var(--teal)}
+.food-suggestions{background:var(--bg);border:.5px solid var(--bdrm);border-radius:var(--r);overflow:hidden;margin-bottom:10px;display:none}
+.food-sug-item{padding:9px 12px;font-size:13px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;border-bottom:.5px solid var(--bdr)}
+.food-sug-item:last-child{border:none}
+.food-sug-item:hover{background:var(--bg2)}
+.food-sug-cal{font-size:11px;color:var(--txt3)}
+.qty-row{display:flex;gap:8px;align-items:center;margin-bottom:12px}
+.qty-row label{font-size:12px;color:var(--txt2);white-space:nowrap}
+.qty-row input{width:80px;padding:7px 10px;border-radius:var(--r);border:.5px solid var(--bdrm);background:var(--bg);font-size:13px;color:var(--txt);font-family:var(--font)}
+.qty-row select{padding:7px 10px;border-radius:var(--r);border:.5px solid var(--bdrm);background:var(--bg);font-size:13px;color:var(--txt);font-family:var(--font)}
+.macro-preview{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px}
+.macro-box{background:var(--bg2);border-radius:var(--r);padding:8px;text-align:center}
+.macro-box .mlb{font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px}
+.macro-box .mlv{font-size:16px;font-weight:600}
+.macro-box .mlv.cal{color:var(--amb)}
+.macro-box .mlv.pro{color:var(--teal)}
+.macro-box .mlv.carb{color:var(--blu)}
+.macro-box .mlv.fat{color:var(--cor)}
+.meal-entry{background:var(--bg);border:.5px solid var(--bdr);border-radius:var(--r);padding:12px;margin-bottom:8px}
+.meal-entry-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.meal-type-badge{font-size:11px;padding:2px 8px;border-radius:20px;background:var(--al);color:var(--ad);font-weight:500}
+.meal-foods{display:flex;flex-direction:column;gap:4px;margin-bottom:8px}
+.meal-food-row{display:flex;justify-content:space-between;align-items:center;font-size:13px}
+.meal-food-name{color:var(--txt)}
+.meal-food-cal{font-size:11px;color:var(--txt3)}
+.meal-macros{display:flex;gap:10px;font-size:11px;border-top:.5px solid var(--bdr);padding-top:8px}
+.mm{display:flex;align-items:center;gap:3px}
+.mm span{font-weight:600}
+.daily-nutrition{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
+.dn-card{background:var(--bg);border:.5px solid var(--bdr);border-radius:var(--r);padding:10px 12px;text-align:center}
+.dn-label{font-size:10px;color:var(--txt2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px}
+.dn-val{font-size:20px;font-weight:600}
+.dn-target{font-size:10px;color:var(--txt3);margin-top:2px}
+.dn-bar{height:4px;background:var(--bg2);border-radius:2px;margin-top:6px;overflow:hidden}
+.dn-bar-fill{height:100%;border-radius:2px;transition:width .4s}
+.nutrition-chart-wrap{position:relative;width:100%;height:180px}
+.ai-analyzing{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--teal);padding:10px 0}
+.ai-analyzing .dot{width:6px;height:6px;border-radius:50%;background:var(--teal);animation:pulse 1.2s infinite}
+.ai-analyzing .dot:nth-child(2){animation-delay:.2s}.ai-analyzing .dot:nth-child(3){animation-delay:.4s}
+.nutrition-result{font-size:13px;line-height:1.7;color:var(--txt);margin-top:8px}
+.nutrition-result strong{color:var(--teal)}
+
 @media(max-width:500px){
   .metrics-row{grid-template-columns:repeat(2,1fr)}
   .fr.t{grid-template-columns:1fr 1fr}
   .report-grid{grid-template-columns:1fr}
+  .macro-preview{grid-template-columns:repeat(2,1fr)}
+  .daily-nutrition{grid-template-columns:repeat(2,1fr)}
 }
 </style>
 </head>
@@ -232,6 +283,7 @@ input[type="file"]{display:none}
   </div>
   <div class="desktop-tabs" id="desktop-tabs">
     <button class="nav-tab active" onclick="showView('today')"><i class="ti ti-calendar-check"></i> today</button>
+    <button class="nav-tab" onclick="showView('meals')"><i class="ti ti-salad"></i> meals</button>
     <button class="nav-tab" onclick="showView('work')"><i class="ti ti-briefcase"></i> work log</button>
     <button class="nav-tab" onclick="showView('summary')"><i class="ti ti-file-text"></i> summary</button>
     <button class="nav-tab" onclick="showView('coach')"><i class="ti ti-brain"></i> coach</button>
@@ -429,14 +481,90 @@ input[type="file"]{display:none}
   </div>
 </div>
 
+<!-- MEAL LOGGER -->
+<div id="view-meals" class="view">
+  <div class="date-bar">
+    <div class="date-label" id="meal-date-label"></div>
+    <div class="date-nav">
+      <button onclick="changeMealDay(-1)"><i class="ti ti-chevron-left"></i></button>
+      <button class="today-btn" onclick="goMealToday()">today</button>
+      <button onclick="changeMealDay(1)"><i class="ti ti-chevron-right"></i></button>
+    </div>
+  </div>
+
+  <!-- Daily nutrition summary -->
+  <div class="daily-nutrition" id="daily-nutrition"></div>
+  <div class="card" style="margin-bottom:12px">
+    <h4>calories breakdown</h4>
+    <div class="nutrition-chart-wrap"><canvas id="chart-nutrition"></canvas></div>
+  </div>
+
+  <!-- Add food entry -->
+  <div class="aform">
+    <h3><i class="ti ti-salad" style="color:var(--amb)"></i> log food</h3>
+    <div class="meal-type-tabs" id="meal-type-tabs">
+      <button class="meal-tab active" onclick="setMealType('breakfast',this)">🌅 Breakfast</button>
+      <button class="meal-tab" onclick="setMealType('lunch',this)">☀️ Lunch</button>
+      <button class="meal-tab" onclick="setMealType('dinner',this)">🌙 Dinner</button>
+      <button class="meal-tab" onclick="setMealType('snack',this)">🍎 Snack</button>
+    </div>
+
+    <div class="food-search-wrap">
+      <input type="text" id="food-search" placeholder="Search: dal, roti, paneer, rice…" oninput="searchFood(this.value)" onkeydown="if(event.key==='Enter')addCustomFood()">
+      <button class="btn p" onclick="addCustomFood()" title="add custom item"><i class="ti ti-plus"></i></button>
+    </div>
+    <div class="food-suggestions" id="food-suggestions"></div>
+
+    <div class="qty-row">
+      <label>qty:</label>
+      <input type="number" id="food-qty" value="1" min="0.1" step="0.1" oninput="updateMacroPreview()">
+      <select id="food-unit" onchange="updateMacroPreview()">
+        <option value="serving">serving</option>
+        <option value="g">grams</option>
+        <option value="ml">ml</option>
+        <option value="cup">cup</option>
+        <option value="tbsp">tbsp</option>
+        <option value="piece">piece</option>
+        <option value="bowl">bowl</option>
+        <option value="plate">plate</option>
+      </select>
+    </div>
+
+    <div class="macro-preview" id="macro-preview">
+      <div class="macro-box"><div class="mlb">calories</div><div class="mlv cal" id="prev-cal">—</div></div>
+      <div class="macro-box"><div class="mlb">protein</div><div class="mlv pro" id="prev-pro">—</div></div>
+      <div class="macro-box"><div class="mlb">carbs</div><div class="mlv carb" id="prev-carb">—</div></div>
+      <div class="macro-box"><div class="mlb">fat</div><div class="mlv fat" id="prev-fat">—</div></div>
+    </div>
+
+    <div id="selected-food-name" style="font-size:12px;color:var(--txt2);margin-bottom:10px;min-height:18px"></div>
+
+    <div class="factions">
+      <button class="btn" onclick="clearFoodSelection()">clear</button>
+      <button class="btn p" onclick="logFoodEntry()"><i class="ti ti-device-floppy"></i> log food</button>
+    </div>
+  </div>
+
+  <!-- AI nutrition insight button -->
+  <button class="analyze-btn" onclick="runNutritionAnalysis()" style="margin-bottom:12px">
+    <i class="ti ti-brain"></i> analyse today's nutrition with AI
+  </button>
+  <div id="nutrition-ai-result"></div>
+
+  <!-- Logged meals for the day -->
+  <div class="sec-hdr"><div class="sec-title">today's meals</div></div>
+  <div id="meal-entries"></div>
+  <div id="empty-meals" class="empty" style="display:none"><i class="ti ti-salad"></i><p>no food logged yet for this day.</p></div>
+</div>
+
 <!-- Mobile bottom nav -->
 <nav class="bottom-nav">
   <button class="bnav-btn active" onclick="showView('today')"    id="bn-today">   <i class="ti ti-calendar-check"></i>today</button>
+  <button class="bnav-btn"        onclick="showView('meals')"    id="bn-meals">   <i class="ti ti-salad"></i>meals</button>
   <button class="bnav-btn"        onclick="showView('work')"     id="bn-work">    <i class="ti ti-briefcase"></i>work</button>
   <button class="bnav-btn"        onclick="showView('summary')"  id="bn-summary"> <i class="ti ti-file-text"></i>summary</button>
   <button class="bnav-btn"        onclick="showView('coach')"    id="bn-coach">   <i class="ti ti-brain"></i>coach</button>
   <button class="bnav-btn"        onclick="showView('reports')"  id="bn-reports"> <i class="ti ti-chart-bar"></i>reports</button>
-  <button class="bnav-btn"        onclick="showView('schedule')" id="bn-schedule"><i class="ti ti-list"></i>schedule</button>
 </nav>
 
 <script>
@@ -447,18 +575,19 @@ const SHORTDAY=['sun','mon','tue','wed','thu','fri','sat'];
 const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const FULLDAY=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const CAT_COLORS={health:'#1D9E75',fitness:'#D85A30',work:'#185FA5',personal:'#534AB7',meal:'#BA7517',learning:'#3B6D11'};
-const VIEWS=['today','work','summary','coach','reports','schedule','import'];
+const VIEWS=['today','meals','work','summary','coach','reports','schedule','import'];
 
 // ═══════════════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════════════
 let state={
-  items:[], completions:{}, workLogs:{},
-  currentDate:todayStr(), workDate:todayStr(), summaryDate:todayStr(),
+  items:[], completions:{}, workLogs:{}, mealLogs:{},
+  currentDate:todayStr(), workDate:todayStr(), summaryDate:todayStr(), mealDate:todayStr(),
   reportPeriod:'week', pendingImport:[], filterCat:'all',
-  taskChips:[]
+  taskChips:[], activeMealType:'breakfast'
 };
 let currentView='today';
+let selectedFood=null; // {name, cal, protein, carbs, fat, unit, perUnit}
 
 // ═══════════════════════════════════════════════════════════════════
 // DATE HELPERS
@@ -484,13 +613,13 @@ function dayApplies(item,dateStr){
 // ═══════════════════════════════════════════════════════════════════
 let saveTimer=null;
 function save(){
-  try{localStorage.setItem('rtV3',JSON.stringify({items:state.items,completions:state.completions,workLogs:state.workLogs}));}catch(e){}
+  try{localStorage.setItem('rtV3',JSON.stringify({items:state.items,completions:state.completions,workLogs:state.workLogs,mealLogs:state.mealLogs}));}catch(e){}
   setSyncDot('saving');
   clearTimeout(saveTimer);
   saveTimer=setTimeout(async()=>{await window._saveToFirebase();setSyncDot(window.FIREBASE_READY?'live':'off');},800);
 }
 function loadLocal(){
-  try{const s=localStorage.getItem('rtV3');if(s){const p=JSON.parse(s);state.items=p.items||[];state.completions=p.completions||{};state.workLogs=p.workLogs||{};}}catch(e){}
+  try{const s=localStorage.getItem('rtV3');if(s){const p=JSON.parse(s);state.items=p.items||[];state.completions=p.completions||{};state.workLogs=p.workLogs||{};state.mealLogs=p.mealLogs||{};}}catch(e){}
 }
 function setSyncDot(st){
   const d=document.getElementById('sync-dot');if(!d)return;
@@ -537,6 +666,7 @@ function showView(v){
   document.querySelectorAll('.nav-tab').forEach((el,i)=>el.classList.toggle('active',VIEWS[i]===v));
   VIEWS.forEach(n=>{const b=document.getElementById('bn-'+n);if(b)b.classList.toggle('active',n===v);});
   if(v==='today')    renderToday();
+  if(v==='meals')    renderMeals();
   if(v==='work')     renderWork();
   if(v==='summary')  renderSummary();
   if(v==='coach')    renderCoach();
@@ -1234,9 +1364,380 @@ const MY_ROUTINE=[
   {id:'r16',name:'Classes',      time:'19:00',duration:120, category:'learning', days:'weekend', goal:'AI certification',          remind:10},
 ];
 
+
 // ═══════════════════════════════════════════════════════════════════
-// BOOT
+// MEAL LOGGER — Indian Veg Food Database
 // ═══════════════════════════════════════════════════════════════════
+// Each entry: {name, cal, protein, carbs, fat} per 1 serving/unit
+// cal=kcal, protein/carbs/fat=grams
+const FOOD_DB = [
+  // ── Breads & Grains ──
+  {name:'Roti (wheat)',        cal:71,  protein:2.7, carbs:15,  fat:0.4,  unit:'piece',   g:30},
+  {name:'Paratha (plain)',     cal:126, protein:3.1, carbs:18,  fat:4.8,  unit:'piece',   g:60},
+  {name:'Aloo Paratha',       cal:200, protein:4.5, carbs:30,  fat:7.0,  unit:'piece',   g:90},
+  {name:'Puri',               cal:112, protein:2.2, carbs:14,  fat:5.5,  unit:'piece',   g:45},
+  {name:'Naan (plain)',       cal:262, protein:8.7, carbs:46,  fat:5.1,  unit:'piece',   g:100},
+  {name:'Bhatura',            cal:245, protein:6.0, carbs:38,  fat:8.5,  unit:'piece',   g:95},
+  {name:'Idli',               cal:39,  protein:2.0, carbs:7.5, fat:0.2,  unit:'piece',   g:40},
+  {name:'Dosa (plain)',       cal:133, protein:3.5, carbs:25,  fat:2.1,  unit:'piece',   g:80},
+  {name:'Masala Dosa',        cal:206, protein:5.0, carbs:35,  fat:6.0,  unit:'piece',   g:120},
+  {name:'Uttapam',            cal:118, protein:4.0, carbs:22,  fat:2.0,  unit:'piece',   g:90},
+  {name:'Poha',               cal:180, protein:3.5, carbs:35,  fat:3.0,  unit:'bowl',    g:150},
+  {name:'Upma',               cal:195, protein:4.5, carbs:33,  fat:5.5,  unit:'bowl',    g:150},
+  {name:'Rice (cooked)',      cal:130, protein:2.7, carbs:28,  fat:0.3,  unit:'cup',     g:150},
+  {name:'Jeera Rice',         cal:150, protein:3.0, carbs:30,  fat:2.5,  unit:'cup',     g:150},
+  {name:'Biryani (veg)',      cal:290, protein:7.0, carbs:52,  fat:6.5,  unit:'plate',   g:250},
+  {name:'Pulao (veg)',        cal:210, protein:5.0, carbs:40,  fat:3.5,  unit:'cup',     g:180},
+  {name:'Khichdi',            cal:180, protein:7.5, carbs:33,  fat:2.5,  unit:'bowl',    g:200},
+
+  // ── Dals & Lentils ──
+  {name:'Dal Tadka',          cal:115, protein:7.5, carbs:18,  fat:2.5,  unit:'bowl',    g:200},
+  {name:'Dal Makhani',        cal:185, protein:9.0, carbs:22,  fat:6.5,  unit:'bowl',    g:200},
+  {name:'Chana Dal',          cal:160, protein:9.5, carbs:24,  fat:2.5,  unit:'bowl',    g:200},
+  {name:'Moong Dal',          cal:105, protein:7.0, carbs:17,  fat:0.5,  unit:'bowl',    g:200},
+  {name:'Rajma',              cal:215, protein:13,  carbs:35,  fat:1.5,  unit:'bowl',    g:200},
+  {name:'Chole (Chana Masala)',cal:270,protein:14,  carbs:42,  fat:6.0,  unit:'bowl',    g:200},
+  {name:'Sambar',             cal:100, protein:5.5, carbs:16,  fat:2.0,  unit:'bowl',    g:200},
+  {name:'Rasam',              cal:60,  protein:2.0, carbs:10,  fat:1.5,  unit:'bowl',    g:200},
+
+  // ── Paneer & Dairy Mains ──
+  {name:'Paneer Butter Masala',cal:290,protein:14,  carbs:12,  fat:21,   unit:'bowl',    g:200},
+  {name:'Palak Paneer',       cal:260, protein:15,  carbs:10,  fat:18,   unit:'bowl',    g:200},
+  {name:'Shahi Paneer',       cal:310, protein:14,  carbs:14,  fat:23,   unit:'bowl',    g:200},
+  {name:'Paneer Bhurji',      cal:240, protein:15,  carbs:7,   fat:17,   unit:'bowl',    g:180},
+  {name:'Matar Paneer',       cal:245, protein:13,  carbs:16,  fat:15,   unit:'bowl',    g:200},
+  {name:'Paneer (raw)',       cal:265, protein:18,  carbs:3,   fat:20,   unit:'piece',   g:100},
+  {name:'Kadhi Pakoda',       cal:220, protein:7.5, carbs:24,  fat:10,   unit:'bowl',    g:200},
+
+  // ── Vegetables ──
+  {name:'Aloo Gobi',          cal:130, protein:3.5, carbs:20,  fat:4.5,  unit:'bowl',    g:200},
+  {name:'Baingan Bharta',     cal:100, protein:3.0, carbs:14,  fat:4.0,  unit:'bowl',    g:180},
+  {name:'Bhindi Masala',      cal:115, protein:3.0, carbs:12,  fat:6.0,  unit:'bowl',    g:180},
+  {name:'Mix Veg Sabzi',      cal:120, protein:4.0, carbs:16,  fat:4.5,  unit:'bowl',    g:200},
+  {name:'Aloo Jeera',         cal:165, protein:3.0, carbs:28,  fat:5.0,  unit:'bowl',    g:180},
+  {name:'Pav Bhaji',          cal:290, protein:7.0, carbs:42,  fat:10,   unit:'plate',   g:250},
+  {name:'Sarson da Saag',     cal:140, protein:6.5, carbs:15,  fat:6.0,  unit:'bowl',    g:200},
+  {name:'Lauki Sabzi',        cal:75,  protein:2.5, carbs:12,  fat:2.5,  unit:'bowl',    g:180},
+  {name:'Methi Sabzi',        cal:90,  protein:4.0, carbs:13,  fat:2.5,  unit:'bowl',    g:150},
+
+  // ── Snacks & Street Food ──
+  {name:'Samosa',             cal:130, protein:2.5, carbs:18,  fat:6.0,  unit:'piece',   g:60},
+  {name:'Kachori',            cal:160, protein:4.0, carbs:20,  fat:7.5,  unit:'piece',   g:70},
+  {name:'Vada',               cal:98,  protein:3.5, carbs:13,  fat:4.0,  unit:'piece',   g:50},
+  {name:'Medu Vada',          cal:112, protein:4.0, carbs:15,  fat:4.5,  unit:'piece',   g:55},
+  {name:'Dhokla',             cal:76,  protein:5.0, carbs:12,  fat:1.0,  unit:'piece',   g:50},
+  {name:'Pakoda (mix veg)',   cal:90,  protein:2.5, carbs:11,  fat:4.5,  unit:'piece',   g:40},
+  {name:'Chaat (papdi)',      cal:180, protein:4.5, carbs:28,  fat:6.0,  unit:'serving', g:150},
+  {name:'Pani Puri',          cal:42,  protein:1.0, carbs:8.0, fat:1.0,  unit:'piece',   g:25},
+  {name:'Bhel Puri',          cal:180, protein:5.0, carbs:32,  fat:4.0,  unit:'serving', g:150},
+  {name:'Dahi Vada',          cal:210, protein:9.0, carbs:30,  fat:6.0,  unit:'serving', g:180},
+  {name:'Aloo Tikki',         cal:130, protein:3.0, carbs:22,  fat:4.0,  unit:'piece',   g:80},
+  {name:'Bread Pakoda',       cal:168, protein:4.5, carbs:22,  fat:7.0,  unit:'piece',   g:80},
+
+  // ── Breakfast Specials ──
+  {name:'Pongal',             cal:165, protein:5.0, carbs:30,  fat:3.5,  unit:'bowl',    g:150},
+  {name:'Rava Idli',          cal:85,  protein:3.0, carbs:15,  fat:1.5,  unit:'piece',   g:60},
+  {name:'Pesarattu',          cal:95,  protein:5.5, carbs:15,  fat:2.0,  unit:'piece',   g:70},
+  {name:'Sabudana Khichdi',   cal:280, protein:3.0, carbs:55,  fat:5.5,  unit:'bowl',    g:200},
+  {name:'Vermicelli Upma',    cal:210, protein:5.0, carbs:38,  fat:4.5,  unit:'bowl',    g:160},
+  {name:'Besan Chilla',       cal:135, protein:8.0, carbs:17,  fat:3.5,  unit:'piece',   g:80},
+
+  // ── Soups & Drinks ──
+  {name:'Tomato Soup',        cal:65,  protein:1.5, carbs:12,  fat:1.5,  unit:'bowl',    g:200},
+  {name:'Lassi (sweet)',      cal:155, protein:5.0, carbs:25,  fat:4.5,  unit:'glass',   g:250},
+  {name:'Lassi (salted)',     cal:105, protein:5.0, carbs:12,  fat:4.0,  unit:'glass',   g:250},
+  {name:'Chaas / Buttermilk', cal:40,  protein:3.0, carbs:5,   fat:1.0,  unit:'glass',   g:250},
+  {name:'Masala Chai (milk)', cal:60,  protein:2.5, carbs:9,   fat:1.5,  unit:'cup',     g:150},
+  {name:'Black Tea',          cal:5,   protein:0,   carbs:1,   fat:0,    unit:'cup',     g:200},
+  {name:'Turmeric Milk',      cal:140, protein:7.0, carbs:14,  fat:6.0,  unit:'glass',   g:250},
+  {name:'Coconut Water',      cal:46,  protein:1.7, carbs:9,   fat:0.5,  unit:'glass',   g:240},
+
+  // ── Dairy & Protein ──
+  {name:'Curd / Dahi',        cal:98,  protein:11,  carbs:7,   fat:3.5,  unit:'bowl',    g:200},
+  {name:'Raita',              cal:75,  protein:4.5, carbs:8,   fat:2.5,  unit:'bowl',    g:150},
+  {name:'Milk (full fat)',    cal:61,  protein:3.2, carbs:4.8, fat:3.5,  unit:'glass',   g:200},
+  {name:'Paneer Tikka',       cal:260, protein:18,  carbs:8,   fat:17,   unit:'serving', g:150},
+
+  // ── Rice Dishes ──
+  {name:'Curd Rice',          cal:185, protein:6.0, carbs:32,  fat:3.5,  unit:'bowl',    g:200},
+  {name:'Tamarind Rice',      cal:200, protein:4.0, carbs:38,  fat:4.5,  unit:'bowl',    g:200},
+  {name:'Lemon Rice',         cal:185, protein:3.5, carbs:36,  fat:3.5,  unit:'bowl',    g:200},
+
+  // ── Sweets & Desserts ──
+  {name:'Gulab Jamun',        cal:143, protein:2.0, carbs:26,  fat:4.5,  unit:'piece',   g:60},
+  {name:'Rasgulla',           cal:106, protein:3.5, carbs:21,  fat:1.5,  unit:'piece',   g:80},
+  {name:'Kheer (rice)',       cal:180, protein:5.0, carbs:30,  fat:5.0,  unit:'bowl',    g:150},
+  {name:'Halwa (suji)',       cal:258, protein:4.5, carbs:38,  fat:10,   unit:'serving', g:100},
+  {name:'Ladoo (besan)',      cal:157, protein:3.0, carbs:22,  fat:6.5,  unit:'piece',   g:50},
+  {name:'Jalebi',             cal:150, protein:1.5, carbs:32,  fat:3.0,  unit:'piece',   g:60},
+  {name:'Barfi (milk)',       cal:130, protein:3.5, carbs:18,  fat:5.5,  unit:'piece',   g:40},
+  {name:'Payasam',            cal:190, protein:5.5, carbs:33,  fat:5.0,  unit:'bowl',    g:150},
+
+  // ── Nuts & Seeds ──
+  {name:'Almonds',            cal:58,  protein:2.1, carbs:2.1, fat:5.0,  unit:'piece',   g:7},
+  {name:'Walnuts',            cal:65,  protein:1.5, carbs:1.4, fat:6.5,  unit:'piece',   g:10},
+  {name:'Peanuts (roasted)',  cal:166, protein:7.5, carbs:6,   fat:14,   unit:'tbsp',    g:30},
+  {name:'Cashews',            cal:55,  protein:1.5, carbs:3,   fat:4.5,  unit:'piece',   g:8},
+];
+
+// Daily targets (default, can be personalised)
+const DAILY_TARGETS = {cal:2000, protein:120, carbs:250, fat:65};
+
+let mealNutritionChart = null;
+
+// ── Meal date navigation ──
+function changeMealDay(n){state.mealDate=addDays(state.mealDate,n);renderMeals();}
+function goMealToday(){state.mealDate=todayStr();renderMeals();}
+function setMealType(type,btn){
+  state.activeMealType=type;
+  document.querySelectorAll('.meal-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// ── Food search ──
+function searchFood(query){
+  const box=document.getElementById('food-suggestions');
+  if(!query||query.length<2){box.style.display='none';return;}
+  const q=query.toLowerCase();
+  const results=FOOD_DB.filter(f=>f.name.toLowerCase().includes(q)).slice(0,8);
+  if(!results.length){box.style.display='none';return;}
+  box.style.display='block';
+  box.innerHTML=results.map(f=>`
+    <div class="food-sug-item" onclick="selectFood(${JSON.stringify(f).replace(/"/g,'&quot;')})">
+      <span>${f.name}</span>
+      <span class="food-sug-cal">${f.cal} kcal / ${f.unit}</span>
+    </div>`).join('');
+}
+
+function selectFood(f){
+  selectedFood=f;
+  document.getElementById('food-search').value=f.name;
+  document.getElementById('food-unit').value=f.unit;
+  document.getElementById('food-suggestions').style.display='none';
+  document.getElementById('selected-food-name').textContent=f.name+' — per '+f.unit+': '+f.cal+' kcal | P:'+f.protein+'g C:'+f.carbs+'g F:'+f.fat+'g';
+  updateMacroPreview();
+}
+
+function addCustomFood(){
+  const name=document.getElementById('food-search').value.trim();
+  if(!name){alert('type a food name first');return;}
+  if(!selectedFood||selectedFood.name!==name){
+    // treat as custom entry — will be analysed by AI
+    selectedFood={name,cal:0,protein:0,carbs:0,fat:0,unit:document.getElementById('food-unit').value,custom:true};
+    document.getElementById('selected-food-name').textContent=name+' — macros will be estimated by AI when you log';
+    updateMacroPreview();
+  }
+}
+
+function updateMacroPreview(){
+  if(!selectedFood){
+    ['cal','pro','carb','fat'].forEach(id=>document.getElementById('prev-'+id).textContent='—');
+    return;
+  }
+  const qty=parseFloat(document.getElementById('food-qty').value)||1;
+  const c=Math.round(selectedFood.cal*qty);
+  const p=(selectedFood.protein*qty).toFixed(1);
+  const cb=(selectedFood.carbs*qty).toFixed(1);
+  const ft=(selectedFood.fat*qty).toFixed(1);
+  document.getElementById('prev-cal').textContent=c?c+'kcal':'?';
+  document.getElementById('prev-pro').textContent=p>0?p+'g':'?';
+  document.getElementById('prev-carb').textContent=cb>0?cb+'g':'?';
+  document.getElementById('prev-fat').textContent=ft>0?ft+'g':'?';
+}
+
+function logFoodEntry(){
+  if(!selectedFood){alert('please select a food first');return;}
+  const qty=parseFloat(document.getElementById('food-qty').value)||1;
+  const d=state.mealDate;
+  if(!state.mealLogs[d])state.mealLogs[d]=[];
+  state.mealLogs[d].push({
+    id:Date.now().toString(),
+    mealType:state.activeMealType,
+    name:selectedFood.name,
+    qty, unit:selectedFood.unit,
+    cal:Math.round(selectedFood.cal*qty),
+    protein:parseFloat((selectedFood.protein*qty).toFixed(1)),
+    carbs:parseFloat((selectedFood.carbs*qty).toFixed(1)),
+    fat:parseFloat((selectedFood.fat*qty).toFixed(1)),
+    custom:!!selectedFood.custom,
+    time:new Date().toTimeString().slice(0,5)
+  });
+  clearFoodSelection();
+  save();
+  renderMeals();
+}
+
+function clearFoodSelection(){
+  selectedFood=null;
+  document.getElementById('food-search').value='';
+  document.getElementById('food-suggestions').style.display='none';
+  document.getElementById('food-qty').value='1';
+  document.getElementById('food-unit').value='serving';
+  document.getElementById('selected-food-name').textContent='';
+  ['cal','pro','carb','fat'].forEach(id=>document.getElementById('prev-'+id).textContent='—');
+}
+
+function deleteMealEntry(d,id){
+  if(!confirm('remove this food entry?'))return;
+  state.mealLogs[d]=state.mealLogs[d].filter(e=>e.id!==id);
+  save();renderMeals();
+}
+
+// ── Render meal view ──
+function renderMeals(){
+  const d=state.mealDate;
+  document.getElementById('meal-date-label').textContent=fmtDate(d)+(d===todayStr()?' — today':'');
+  const entries=state.mealLogs[d]||[];
+  const totals=entries.reduce((acc,e)=>({cal:acc.cal+e.cal,protein:acc.protein+e.protein,carbs:acc.carbs+e.carbs,fat:acc.fat+e.fat}),{cal:0,protein:0,carbs:0,fat:0});
+
+  // Daily nutrition cards
+  const nn=[
+    {lbl:'calories',val:Math.round(totals.cal),target:DAILY_TARGETS.cal,unit:'kcal',cls:'cal',color:'#BA7517'},
+    {lbl:'protein', val:totals.protein.toFixed(1),target:DAILY_TARGETS.protein,unit:'g',cls:'pro',color:'#1D9E75'},
+    {lbl:'carbs',   val:totals.carbs.toFixed(1),  target:DAILY_TARGETS.carbs,  unit:'g',cls:'carb',color:'#185FA5'},
+    {lbl:'fat',     val:totals.fat.toFixed(1),    target:DAILY_TARGETS.fat,    unit:'g',cls:'fat', color:'#D85A30'},
+  ];
+  document.getElementById('daily-nutrition').innerHTML=nn.map(n=>{
+    const pct=Math.min(Math.round((n.val/n.target)*100),100);
+    const over=n.val>n.target;
+    return `<div class="dn-card">
+      <div class="dn-label">${n.lbl}</div>
+      <div class="dn-val" style="color:${over?'var(--red)':n.color}">${n.val}</div>
+      <div class="dn-target">${n.unit} / ${n.target} target</div>
+      <div class="dn-bar"><div class="dn-bar-fill" style="width:${pct}%;background:${over?'var(--red)':n.color}"></div></div>
+    </div>`;
+  }).join('');
+
+  // Nutrition chart — calories by meal type
+  const mealTypes=['breakfast','lunch','dinner','snack'];
+  const mealLabels=['Breakfast','Lunch','Dinner','Snack'];
+  const mealColors=['#BA7517','#185FA5','#534AB7','#1D9E75'];
+  const mealCals=mealTypes.map(mt=>entries.filter(e=>e.mealType===mt).reduce((s,e)=>s+e.cal,0));
+
+  if(mealNutritionChart){try{mealNutritionChart.destroy();}catch(e){}}
+  const ctx=document.getElementById('chart-nutrition');
+  if(ctx&&mealCals.some(c=>c>0)){
+    mealNutritionChart=new Chart(ctx,{
+      type:'bar',
+      data:{labels:mealLabels,datasets:[
+        {label:'Calories',data:mealCals,backgroundColor:mealColors.map(c=>c+'cc'),borderColor:mealColors,borderWidth:1.5,borderRadius:6}
+      ]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+        scales:{y:{ticks:{callback:v=>v+'kcal',font:{size:11}},grid:{color:'rgba(128,128,128,.1)'}},x:{ticks:{font:{size:11}},grid:{display:false}}}}
+    });
+  } else if(ctx){
+    const c2=ctx.getContext('2d');c2.clearRect(0,0,ctx.width,ctx.height);
+  }
+
+  // Group entries by meal type
+  const el=document.getElementById('meal-entries');
+  document.getElementById('empty-meals').style.display=entries.length?'none':'block';
+  if(!entries.length){el.innerHTML='';return;}
+
+  const grouped={};
+  mealTypes.forEach(mt=>{
+    const es=entries.filter(e=>e.mealType===mt);
+    if(es.length)grouped[mt]=es;
+  });
+  const mealEmoji={breakfast:'🌅',lunch:'☀️',dinner:'🌙',snack:'🍎'};
+  el.innerHTML=Object.entries(grouped).map(([mt,es])=>{
+    const mtot=es.reduce((acc,e)=>({cal:acc.cal+e.cal,protein:acc.protein+e.protein,carbs:acc.carbs+e.carbs,fat:acc.fat+e.fat}),{cal:0,protein:0,carbs:0,fat:0});
+    return `<div class="meal-entry">
+      <div class="meal-entry-header">
+        <span class="meal-type-badge">${mealEmoji[mt]||''} ${mt.charAt(0).toUpperCase()+mt.slice(1)}</span>
+        <span style="font-size:12px;color:var(--amb);font-weight:600">${Math.round(mtot.cal)} kcal</span>
+      </div>
+      <div class="meal-foods">
+        ${es.map(e=>`
+          <div class="meal-food-row">
+            <div style="display:flex;align-items:center;gap:6px">
+              <button onclick="deleteMealEntry('${d}','${e.id}')" style="width:20px;height:20px;border-radius:50%;border:.5px solid var(--bdr);background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0" title="remove">
+                <i class="ti ti-x" style="font-size:10px;color:var(--txt3)"></i>
+              </button>
+              <span class="meal-food-name">${esc(e.name)} <span style="color:var(--txt3)">${e.qty} ${e.unit}</span></span>
+            </div>
+            <span class="meal-food-cal">${e.cal} kcal</span>
+          </div>`).join('')}
+      </div>
+      <div class="meal-macros">
+        <div class="mm"><span style="color:var(--teal)">${mtot.protein.toFixed(1)}g</span> protein</div>
+        <div class="mm"><span style="color:var(--blu)">${mtot.carbs.toFixed(1)}g</span> carbs</div>
+        <div class="mm"><span style="color:var(--cor)">${mtot.fat.toFixed(1)}g</span> fat</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── AI Nutrition Analysis ──
+async function runNutritionAnalysis(){
+  const d=state.mealDate;
+  const entries=state.mealLogs[d]||[];
+  const el=document.getElementById('nutrition-ai-result');
+
+  if(!entries.length){el.innerHTML='<div style="font-size:13px;color:var(--txt2);padding:10px 0">log some food first to get an analysis.</div>';return;}
+
+  el.innerHTML=`<div class="ai-analyzing"><div class="dot"></div><div class="dot"></div><div class="dot"></div><span>analysing your nutrition…</span></div>`;
+
+  const totals=entries.reduce((acc,e)=>({cal:acc.cal+e.cal,protein:acc.protein+e.protein,carbs:acc.carbs+e.carbs,fat:acc.fat+e.fat}),{cal:0,protein:0,carbs:0,fat:0});
+  const mealSummary=entries.map(e=>`${e.name} (${e.qty} ${e.unit}) — ${e.cal}kcal, P:${e.protein}g, C:${e.carbs}g, F:${e.fat}g`).join('\n');
+
+  // Also check if there are custom entries needing macro estimation
+  const customItems=entries.filter(e=>e.custom&&e.cal===0);
+
+  const prompt=`You are a certified Indian vegetarian nutrition expert. Analyse this person's food intake for the day.
+
+DATE: ${fmtDate(d)}
+FOOD LOGGED:
+${mealSummary}
+
+DAILY TOTALS:
+- Calories: ${Math.round(totals.cal)} / ${DAILY_TARGETS.cal} target
+- Protein: ${totals.protein.toFixed(1)}g / ${DAILY_TARGETS.protein}g target
+- Carbs: ${totals.carbs.toFixed(1)}g / ${DAILY_TARGETS.carbs}g target
+- Fat: ${totals.fat.toFixed(1)}g / ${DAILY_TARGETS.fat}g target
+
+PERSON'S GOALS: Reduce body fat to 20%, active lifestyle (gym daily), busy professional
+
+${customItems.length ? 'NOTE: Some items were manually entered without macro data — please estimate their nutrition values based on standard Indian recipes.\n' : ''}
+
+Please provide:
+1. **Nutrition Score** (out of 10) with a one-line reason
+2. **What you did well** (1-2 points specific to their food)
+3. **What to improve** (2-3 specific, actionable suggestions for tomorrow)
+4. **Protein gap** — are they meeting their protein needs for muscle/body fat goals?
+5. **One smart swap** — one specific Indian food swap to improve the day (e.g. "swap white rice with brown rice or daliya")
+
+Keep it concise, practical, and specific to Indian vegetarian food. Max 200 words.`;
+
+  try{
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:600,messages:[{role:'user',content:prompt}]})
+    });
+    const data=await resp.json();
+    const txt=data.content?.find(b=>b.type==='text')?.text||'';
+    if(!txt)throw new Error('empty');
+    el.innerHTML=`<div class="nutrition-result">${formatAIText(txt)}</div>`;
+  }catch(e){
+    el.innerHTML=`<div class="nutrition-result">${buildFallbackNutrition(totals)}</div>`;
+  }
+}
+
+function buildFallbackNutrition(totals){
+  const calPct=Math.round(totals.cal/DAILY_TARGETS.cal*100);
+  const proPct=Math.round(totals.protein/DAILY_TARGETS.protein*100);
+  let txt='<strong>Nutrition Summary</strong><br>';
+  txt+=calPct>110?'⚠️ Over calorie target — consider lighter snacks tomorrow.<br>':calPct<70?'⬇️ Under-eating — make sure you hit your calorie target.<br>':'✅ Calories in a good range.<br>';
+  txt+=proPct<80?`<br><strong>Protein gap:</strong> You hit only ${proPct}% of your protein target. Add a bowl of dal, curd, or paneer to each meal.<br>`:'<br>✅ Good protein intake for your goals.<br>';
+  txt+='<br><strong>Smart swap:</strong> Try replacing refined grains (maida roti/naan) with whole wheat roti or multigrain roti for better fibre and satiety.';
+  return txt;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// END MEAL LOGGER
+// ═══════════════════════════════════════════════════════════════════
+
 loadLocal();
 if(!state.items.length){state.items=MY_ROUTINE;save();}
 setSyncDot(window.FIREBASE_READY?'live':'off');
