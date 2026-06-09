@@ -15,9 +15,12 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getFirestore, doc, setDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 const FIREBASE_CONFIG = {
-  apiKey:"PASTE_API_KEY_HERE", authDomain:"PASTE_PROJECT_ID_HERE.firebaseapp.com",
-  projectId:"PASTE_PROJECT_ID_HERE", storageBucket:"PASTE_PROJECT_ID_HERE.appspot.com",
-  messagingSenderId:"PASTE_SENDER_ID_HERE", appId:"PASTE_APP_ID_HERE"
+  apiKey: "AIzaSyBcJgURkeBthHabtHjq130U9SEeIpR4IU8",
+  authDomain: "dig-routine-tracker.firebaseapp.com",
+  projectId: "dig-routine-tracker",
+  storageBucket: "dig-routine-tracker.firebasestorage.app",
+  messagingSenderId: "194398144251",
+  appId: "1:194398144251:web:c1a09fdab47d2b6604925e",
 };
 const FIREBASE_READY = !FIREBASE_CONFIG.apiKey.includes('PASTE');
 window.FIREBASE_READY = FIREBASE_READY;
