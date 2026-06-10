@@ -12,37 +12,141 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script type="module">
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { initializeApp }          from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getFirestore, doc, setDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+         signOut, onAuthStateChanged, updateProfile }
+                                   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+
+// ─── STEP 1: paste your Firebase config here ────────────────────────
 const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyBcJgURkeBthHabtHjq130U9SEeIpR4IU8",
+ apiKey: "AIzaSyBcJgURkeBthHabtHjq130U9SEeIpR4IU8",
   authDomain: "dig-routine-tracker.firebaseapp.com",
   projectId: "dig-routine-tracker",
   storageBucket: "dig-routine-tracker.firebasestorage.app",
   messagingSenderId: "194398144251",
   appId: "1:194398144251:web:c1a09fdab47d2b6604925e",
 };
+// ────────────────────────────────────────────────────────────────────
+
 const FIREBASE_READY = !FIREBASE_CONFIG.apiKey.includes('PASTE');
 window.FIREBASE_READY = FIREBASE_READY;
-if(FIREBASE_READY){
-  const app=initializeApp(FIREBASE_CONFIG), db=getFirestore(app);
-  const ref=doc(db,'routine','shared');
-  onSnapshot(ref,snap=>{
-    if(snap.exists()){
-      const r=snap.data();
-      state.items=r.items||state.items;
-      state.completions=r.completions||state.completions;
-      state.workLogs=r.workLogs||state.workLogs;
-      state.mealLogs=r.mealLogs||state.mealLogs;
-      state.bodyMetrics=r.bodyMetrics||state.bodyMetrics;
-      state.waterLog=r.waterLog||state.waterLog;
-      renderCurrent();
+
+if (FIREBASE_READY) {
+  const app  = initializeApp(FIREBASE_CONFIG);
+  const db   = getFirestore(app);
+  const auth = getAuth(app);
+  let unsub  = null;
+
+  // ── Auth state listener ──────────────────────────────────────────
+  onAuthStateChanged(auth, user => {
+    if (user) {
+      window._currentUser = { uid: user.uid, email: user.email, name: user.displayName || user.email.split('@')[0] };
+      // subscribe to THIS user's document only
+      if (unsub) unsub();
+      const ref = doc(db, 'users', user.uid, 'data', 'main');
+      unsub = onSnapshot(ref, snap => {
+        if (snap.exists()) {
+          const r = snap.data();
+          state.items       = r.items       || state.items;
+          state.completions = r.completions || state.completions;
+          state.workLogs    = r.workLogs    || state.workLogs;
+          state.mealLogs    = r.mealLogs    || state.mealLogs;
+          state.bodyMetrics = r.bodyMetrics || state.bodyMetrics;
+          state.waterLog    = r.waterLog    || state.waterLog;
+          renderCurrent();
+        }
+      });
+      hideAuthScreen();
+    } else {
+      window._currentUser = null;
+      if (unsub) { unsub(); unsub = null; }
+      showAuthScreen();
     }
   });
-  window._saveToFirebase=async()=>{
-    try{ await setDoc(ref,{items:state.items,completions:state.completions,workLogs:state.workLogs,mealLogs:state.mealLogs,bodyMetrics:state.bodyMetrics,waterLog:state.waterLog,updatedAt:Date.now()}); }catch(e){}
+
+  window._saveToFirebase = async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+    try {
+      const ref = doc(db, 'users', user.uid, 'data', 'main');
+      await setDoc(ref, {
+        items: state.items, completions: state.completions,
+        workLogs: state.workLogs, mealLogs: state.mealLogs,
+        bodyMetrics: state.bodyMetrics, waterLog: state.waterLog,
+        updatedAt: Date.now()
+      });
+    } catch(e) { console.warn('Firebase save failed', e); }
   };
-} else { window._saveToFirebase=()=>{}; }
+
+  window._authSignUp = async (email, pass, name) => {
+    const cred = await createUserWithEmailAndPassword(auth, email, pass);
+    await updateProfile(cred.user, { displayName: name });
+  };
+  window._authSignIn = (email, pass) => signInWithEmailAndPassword(auth, email, pass);
+  window._authSignOut = () => { if (unsub){unsub();unsub=null;} signOut(auth); };
+
+} else {
+  // Offline mode – use local profile picker
+  window._saveToFirebase = () => {};
+  window._authSignUp     = async (email, pass, name) => {
+    const profiles = JSON.parse(localStorage.getItem('rt_profiles') || '[]');
+    if (profiles.find(p => p.email === email)) throw new Error('Email already registered');
+    const uid = 'local_' + Date.now();
+    profiles.push({ uid, email, name, pass });
+    localStorage.setItem('rt_profiles', JSON.stringify(profiles));
+    window._currentUser = { uid, email, name };
+    localStorage.setItem('rt_activeUser', JSON.stringify(window._currentUser));
+    hideAuthScreen();
+  };
+  window._authSignIn = async (email, pass) => {
+    const profiles = JSON.parse(localStorage.getItem('rt_profiles') || '[]');
+    const p = profiles.find(p => p.email === email && p.pass === pass);
+    if (!p) throw new Error('Invalid email or password');
+    window._currentUser = { uid: p.uid, email: p.email, name: p.name };
+    localStorage.setItem('rt_activeUser', JSON.stringify(window._currentUser));
+    hideAuthScreen();
+  };
+  window._authSignOut = () => {
+    window._currentUser = null;
+    localStorage.removeItem('rt_activeUser');
+    // reset state so next user starts fresh
+    state.items=[]; state.completions={}; state.workLogs={};
+    state.mealLogs={}; state.bodyMetrics=[]; state.waterLog={};
+    showAuthScreen();
+  };
+  // Auto-login if a session exists
+  setTimeout(() => {
+    const active = localStorage.getItem('rt_activeUser');
+    if (active) { window._currentUser = JSON.parse(active); hideAuthScreen(); }
+    else showAuthScreen();
+  }, 100);
+}
+
+function showAuthScreen()  { const el=document.getElementById('auth-screen'); if(el) el.style.display='flex'; }
+function hideAuthScreen()  {
+  const el=document.getElementById('auth-screen'); if(el) el.style.display='none';
+  // load user-specific localStorage data
+  const uid = window._currentUser?.uid;
+  if (uid) {
+    try {
+      const s = localStorage.getItem('rtV3_'+uid);
+      if (s) {
+        const p = JSON.parse(s);
+        state.items       = p.items       || [];
+        state.completions = p.completions || {};
+        state.workLogs    = p.workLogs    || {};
+        state.mealLogs    = p.mealLogs    || {};
+        state.bodyMetrics = p.bodyMetrics || [];
+        state.waterLog    = p.waterLog    || {};
+      }
+    } catch(e) {}
+  }
+  renderCurrentOrBoot();
+  updateUserBadge();
+}
+window.showAuthScreen = showAuthScreen;
+window.hideAuthScreen = hideAuthScreen;
 </script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -231,7 +335,30 @@ input[type="file"]{display:none}
 .grow{display:grid;grid-template-columns:90px 1fr;gap:8px;font-size:13px;padding:5px 0;border-bottom:.5px solid var(--bdr)}
 .grow:last-child{border:none}.gcol{font-weight:600;color:var(--teal)}.gdesc{color:var(--txt2)}
 
-/* ── Meal Logger ── */
+/* ── Auth Screen ── */
+#auth-screen{position:fixed;inset:0;background:var(--bg3);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px}
+.auth-box{background:var(--bg);border:.5px solid var(--bdr);border-radius:var(--rl);padding:28px 24px;width:100%;max-width:360px}
+.auth-logo{text-align:center;margin-bottom:20px}
+.auth-logo i{font-size:36px;color:var(--teal)}
+.auth-logo h1{font-size:20px;font-weight:700;margin-top:6px}
+.auth-logo p{font-size:13px;color:var(--txt2);margin-top:3px}
+.auth-tabs{display:flex;border:.5px solid var(--bdr);border-radius:var(--r);overflow:hidden;margin-bottom:18px}
+.auth-tab{flex:1;padding:8px;text-align:center;font-size:13px;font-weight:500;cursor:pointer;border:none;background:transparent;color:var(--txt2);transition:all .15s}
+.auth-tab.active{background:var(--teal);color:#fff}
+.auth-field{margin-bottom:12px}
+.auth-field label{font-size:12px;color:var(--txt2);display:block;margin-bottom:4px}
+.auth-field input{width:100%;padding:9px 12px;border-radius:var(--r);border:.5px solid var(--bdrm);background:var(--bg2);font-size:13px;color:var(--txt);font-family:var(--font)}
+.auth-field input:focus{outline:none;border-color:var(--teal)}
+.auth-submit{width:100%;padding:10px;border-radius:var(--r);border:none;background:var(--teal);color:#fff;font-size:14px;font-weight:600;cursor:pointer;margin-top:4px;font-family:var(--font);transition:all .15s}
+.auth-submit:hover{opacity:.88}
+.auth-error{font-size:12px;color:var(--red);margin-top:8px;text-align:center;min-height:18px}
+.auth-offline-note{font-size:11px;color:var(--txt3);text-align:center;margin-top:12px;line-height:1.5}
+/* ── User badge ── */
+.user-badge{display:flex;align-items:center;gap:8px}
+.user-avatar{width:28px;height:28px;border-radius:50%;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;cursor:pointer}
+.user-name{font-size:12px;color:var(--txt2);cursor:pointer}
+.signout-btn{font-size:11px;padding:3px 9px;border-radius:20px;border:.5px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;font-family:var(--font)}
+.signout-btn:hover{background:var(--rl2);color:var(--red)}
 .meal-type-tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
 .meal-tab{padding:5px 14px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:.5px solid var(--bdr);background:var(--bg);color:var(--txt2);transition:all .15s}
 .meal-tab.active{background:var(--amb);color:#fff;border-color:var(--amb)}
@@ -295,17 +422,47 @@ input[type="file"]{display:none}
     <i class="ti ti-layout-dashboard"></i> routine tracker
     <div class="sync-dot" id="sync-dot" title="sync status"></div>
   </div>
-  <div class="desktop-tabs" id="desktop-tabs">
-    <button class="nav-tab active" onclick="showView('today')"><i class="ti ti-calendar-check"></i> today</button>
-    <button class="nav-tab" onclick="showView('meals')"><i class="ti ti-salad"></i> meals</button>
-    <button class="nav-tab" onclick="showView('metrics')"><i class="ti ti-activity"></i> body</button>
-    <button class="nav-tab" onclick="showView('work')"><i class="ti ti-briefcase"></i> work</button>
-    <button class="nav-tab" onclick="showView('summary')"><i class="ti ti-file-text"></i> summary</button>
-    <button class="nav-tab" onclick="showView('coach')"><i class="ti ti-brain"></i> coach</button>
-    <button class="nav-tab" onclick="showView('reports')"><i class="ti ti-chart-bar"></i> reports</button>
-    <button class="nav-tab" onclick="showView('schedule')"><i class="ti ti-list"></i> schedule</button>
-    <button class="nav-tab" onclick="showView('settings')"><i class="ti ti-settings"></i> settings</button>
-    <button class="nav-tab" onclick="showView('import')"><i class="ti ti-upload"></i> import</button>
+  <div style="display:flex;align-items:center;gap:10px">
+    <div class="user-badge" id="user-badge" style="display:none">
+      <div class="user-avatar" id="user-avatar"></div>
+      <span class="user-name" id="user-name-badge"></span>
+      <button class="signout-btn" onclick="doSignOut()"><i class="ti ti-logout" style="font-size:11px"></i> sign out</button>
+    </div>
+    <div class="desktop-tabs" id="desktop-tabs">
+      <button class="nav-tab active" onclick="showView('today')"><i class="ti ti-calendar-check"></i> today</button>
+      <button class="nav-tab" onclick="showView('meals')"><i class="ti ti-salad"></i> meals</button>
+      <button class="nav-tab" onclick="showView('metrics')"><i class="ti ti-activity"></i> body</button>
+      <button class="nav-tab" onclick="showView('work')"><i class="ti ti-briefcase"></i> work</button>
+      <button class="nav-tab" onclick="showView('summary')"><i class="ti ti-file-text"></i> summary</button>
+      <button class="nav-tab" onclick="showView('coach')"><i class="ti ti-brain"></i> coach</button>
+      <button class="nav-tab" onclick="showView('reports')"><i class="ti ti-chart-bar"></i> reports</button>
+      <button class="nav-tab" onclick="showView('schedule')"><i class="ti ti-list"></i> schedule</button>
+      <button class="nav-tab" onclick="showView('settings')"><i class="ti ti-settings"></i> settings</button>
+      <button class="nav-tab" onclick="showView('import')"><i class="ti ti-upload"></i> import</button>
+    </div>
+  </div>
+</div>
+
+<!-- AUTH SCREEN OVERLAY -->
+<div id="auth-screen" style="display:none">
+  <div class="auth-box">
+    <div class="auth-logo">
+      <i class="ti ti-layout-dashboard"></i>
+      <h1>routine tracker</h1>
+      <p>your personal daily planner</p>
+    </div>
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tab-signin" onclick="switchAuthTab('signin')">sign in</button>
+      <button class="auth-tab" id="tab-signup" onclick="switchAuthTab('signup')">create account</button>
+    </div>
+    <div id="auth-signup-name" style="display:none">
+      <div class="auth-field"><label>your name</label><input type="text" id="auth-name" placeholder="e.g. Rahul"></div>
+    </div>
+    <div class="auth-field"><label>email</label><input type="email" id="auth-email" placeholder="you@example.com"></div>
+    <div class="auth-field"><label>password</label><input type="password" id="auth-pass" placeholder="min 6 characters"></div>
+    <button class="auth-submit" id="auth-submit-btn" onclick="doAuth()">sign in</button>
+    <div class="auth-error" id="auth-error"></div>
+    <div class="auth-offline-note" id="auth-offline-note"></div>
   </div>
 </div>
 
@@ -536,6 +693,11 @@ input[type="file"]{display:none}
       <button class="meal-tab" onclick="setMealType('snack',this)">🍎 Snack</button>
     </div>
 
+    <div style="display:flex;gap:6px;margin-bottom:10px">
+      <button class="food-filter-btn cat-btn active" onclick="setFoodFilter('all',this)">🍽 all</button>
+      <button class="food-filter-btn cat-btn" onclick="setFoodFilter('veg',this)">🟢 veg only</button>
+      <button class="food-filter-btn cat-btn" onclick="setFoodFilter('nonveg',this)">🍗 non-veg</button>
+    </div>
     <div class="food-search-wrap">
       <input type="text" id="food-search" placeholder="Search: dal, roti, paneer, rice…" oninput="searchFood(this.value)" onkeydown="if(event.key==='Enter')addCustomFood()">
       <button class="btn p" onclick="addCustomFood()" title="add custom item"><i class="ti ti-plus"></i></button>
@@ -754,13 +916,15 @@ function dayApplies(item,dateStr){
 // ═══════════════════════════════════════════════════════════════════
 let saveTimer=null;
 function save(){
-  try{localStorage.setItem('rtV3',JSON.stringify({items:state.items,completions:state.completions,workLogs:state.workLogs,mealLogs:state.mealLogs,bodyMetrics:state.bodyMetrics,waterLog:state.waterLog}));}catch(e){}
+  const _uid=window._currentUser?.uid||'guest';
+  try{localStorage.setItem('rtV3_'+_uid,JSON.stringify({items:state.items,completions:state.completions,workLogs:state.workLogs,mealLogs:state.mealLogs,bodyMetrics:state.bodyMetrics,waterLog:state.waterLog}));}catch(e){}
   setSyncDot('saving');
   clearTimeout(saveTimer);
   saveTimer=setTimeout(async()=>{await window._saveToFirebase();setSyncDot(window.FIREBASE_READY?'live':'off');},800);
 }
 function loadLocal(){
-  try{const s=localStorage.getItem('rtV3');if(s){const p=JSON.parse(s);state.items=p.items||[];state.completions=p.completions||{};state.workLogs=p.workLogs||{};state.mealLogs=p.mealLogs||{};state.bodyMetrics=p.bodyMetrics||[];state.waterLog=p.waterLog||{};}}catch(e){}
+  const _uid=window._currentUser?.uid||'guest';
+  try{const s=localStorage.getItem('rtV3_'+_uid);if(s){const p=JSON.parse(s);state.items=p.items||[];state.completions=p.completions||{};state.workLogs=p.workLogs||{};state.mealLogs=p.mealLogs||{};state.bodyMetrics=p.bodyMetrics||[];state.waterLog=p.waterLog||{};}}catch(e){}
 }
 function setSyncDot(st){
   const d=document.getElementById('sync-dot');if(!d)return;
@@ -1503,6 +1667,74 @@ function checkReminders(){
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 // ═══════════════════════════════════════════════════════════════════
+// AUTH HELPERS (called from HTML onclick)
+// ═══════════════════════════════════════════════════════════════════
+let _authMode = 'signin';
+function switchAuthTab(mode) {
+  _authMode = mode;
+  document.getElementById('tab-signin').classList.toggle('active', mode==='signin');
+  document.getElementById('tab-signup').classList.toggle('active', mode==='signup');
+  document.getElementById('auth-signup-name').style.display = mode==='signup' ? 'block' : 'none';
+  document.getElementById('auth-submit-btn').textContent = mode==='signin' ? 'sign in' : 'create account';
+  document.getElementById('auth-error').textContent = '';
+  if (!window.FIREBASE_READY) {
+    document.getElementById('auth-offline-note').textContent =
+      mode==='signup'
+        ? '⚠ Offline mode: accounts are stored on this device only. Enable Firebase for true multi-device sync.'
+        : '⚠ Offline mode: using local account storage.';
+  }
+}
+async function doAuth() {
+  const email = document.getElementById('auth-email').value.trim();
+  const pass  = document.getElementById('auth-pass').value;
+  const name  = document.getElementById('auth-name')?.value.trim() || email.split('@')[0];
+  const errEl = document.getElementById('auth-error');
+  errEl.textContent = '';
+  if (!email || !pass) { errEl.textContent = 'please fill in all fields'; return; }
+  if (pass.length < 6)  { errEl.textContent = 'password must be at least 6 characters'; return; }
+  const btn = document.getElementById('auth-submit-btn');
+  btn.textContent = 'please wait…'; btn.disabled = true;
+  try {
+    if (_authMode === 'signup') await window._authSignUp(email, pass, name);
+    else                        await window._authSignIn(email, pass);
+  } catch(e) {
+    errEl.textContent = e.message.replace('Firebase: ','').replace(/\(auth\/.*\)/,'').trim();
+    btn.textContent = _authMode === 'signin' ? 'sign in' : 'create account';
+    btn.disabled = false;
+  }
+}
+function doSignOut() {
+  if (!confirm('sign out?')) return;
+  // reset in-memory state for next user
+  state.items=[]; state.completions={}; state.workLogs={};
+  state.mealLogs={}; state.bodyMetrics=[]; state.waterLog={};
+  window._authSignOut();
+}
+function updateUserBadge() {
+  const u = window._currentUser;
+  const badge = document.getElementById('user-badge');
+  const avatar = document.getElementById('user-avatar');
+  const nameEl = document.getElementById('user-name-badge');
+  if (!badge) return;
+  if (u) {
+    badge.style.display = 'flex';
+    const initials = (u.name||u.email).split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    avatar.textContent = initials;
+    if (nameEl) nameEl.textContent = u.name || u.email;
+  } else {
+    badge.style.display = 'none';
+  }
+}
+function renderCurrentOrBoot() {
+  if (!state.items.length) { state.items = MY_ROUTINE; save(); }
+  const _s = getSettings();
+  applyTheme(_s.theme);
+  setSyncDot(window.FIREBASE_READY ? 'live' : 'off');
+  renderToday();
+  if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // SEED DATA
 // ═══════════════════════════════════════════════════════════════════
 const MY_ROUTINE=[
@@ -1531,114 +1763,275 @@ const MY_ROUTINE=[
 // Each entry: {name, cal, protein, carbs, fat} per 1 serving/unit
 // cal=kcal, protein/carbs/fat=grams
 const FOOD_DB = [
-  // ── Breads & Grains ──
-  {name:'Roti (wheat)',        cal:71,  protein:2.7, carbs:15,  fat:0.4,  unit:'piece',   g:30},
-  {name:'Paratha (plain)',     cal:126, protein:3.1, carbs:18,  fat:4.8,  unit:'piece',   g:60},
-  {name:'Aloo Paratha',       cal:200, protein:4.5, carbs:30,  fat:7.0,  unit:'piece',   g:90},
-  {name:'Puri',               cal:112, protein:2.2, carbs:14,  fat:5.5,  unit:'piece',   g:45},
-  {name:'Naan (plain)',       cal:262, protein:8.7, carbs:46,  fat:5.1,  unit:'piece',   g:100},
-  {name:'Bhatura',            cal:245, protein:6.0, carbs:38,  fat:8.5,  unit:'piece',   g:95},
-  {name:'Idli',               cal:39,  protein:2.0, carbs:7.5, fat:0.2,  unit:'piece',   g:40},
-  {name:'Dosa (plain)',       cal:133, protein:3.5, carbs:25,  fat:2.1,  unit:'piece',   g:80},
-  {name:'Masala Dosa',        cal:206, protein:5.0, carbs:35,  fat:6.0,  unit:'piece',   g:120},
-  {name:'Uttapam',            cal:118, protein:4.0, carbs:22,  fat:2.0,  unit:'piece',   g:90},
-  {name:'Poha',               cal:180, protein:3.5, carbs:35,  fat:3.0,  unit:'bowl',    g:150},
-  {name:'Upma',               cal:195, protein:4.5, carbs:33,  fat:5.5,  unit:'bowl',    g:150},
-  {name:'Rice (cooked)',      cal:130, protein:2.7, carbs:28,  fat:0.3,  unit:'cup',     g:150},
-  {name:'Jeera Rice',         cal:150, protein:3.0, carbs:30,  fat:2.5,  unit:'cup',     g:150},
-  {name:'Biryani (veg)',      cal:290, protein:7.0, carbs:52,  fat:6.5,  unit:'plate',   g:250},
-  {name:'Pulao (veg)',        cal:210, protein:5.0, carbs:40,  fat:3.5,  unit:'cup',     g:180},
-  {name:'Khichdi',            cal:180, protein:7.5, carbs:33,  fat:2.5,  unit:'bowl',    g:200},
-
-  // ── Dals & Lentils ──
-  {name:'Dal Tadka',          cal:115, protein:7.5, carbs:18,  fat:2.5,  unit:'bowl',    g:200},
-  {name:'Dal Makhani',        cal:185, protein:9.0, carbs:22,  fat:6.5,  unit:'bowl',    g:200},
-  {name:'Chana Dal',          cal:160, protein:9.5, carbs:24,  fat:2.5,  unit:'bowl',    g:200},
-  {name:'Moong Dal',          cal:105, protein:7.0, carbs:17,  fat:0.5,  unit:'bowl',    g:200},
-  {name:'Rajma',              cal:215, protein:13,  carbs:35,  fat:1.5,  unit:'bowl',    g:200},
-  {name:'Chole (Chana Masala)',cal:270,protein:14,  carbs:42,  fat:6.0,  unit:'bowl',    g:200},
-  {name:'Sambar',             cal:100, protein:5.5, carbs:16,  fat:2.0,  unit:'bowl',    g:200},
-  {name:'Rasam',              cal:60,  protein:2.0, carbs:10,  fat:1.5,  unit:'bowl',    g:200},
-
-  // ── Paneer & Dairy Mains ──
-  {name:'Paneer Butter Masala',cal:290,protein:14,  carbs:12,  fat:21,   unit:'bowl',    g:200},
-  {name:'Palak Paneer',       cal:260, protein:15,  carbs:10,  fat:18,   unit:'bowl',    g:200},
-  {name:'Shahi Paneer',       cal:310, protein:14,  carbs:14,  fat:23,   unit:'bowl',    g:200},
-  {name:'Paneer Bhurji',      cal:240, protein:15,  carbs:7,   fat:17,   unit:'bowl',    g:180},
-  {name:'Matar Paneer',       cal:245, protein:13,  carbs:16,  fat:15,   unit:'bowl',    g:200},
-  {name:'Paneer (raw)',       cal:265, protein:18,  carbs:3,   fat:20,   unit:'piece',   g:100},
-  {name:'Kadhi Pakoda',       cal:220, protein:7.5, carbs:24,  fat:10,   unit:'bowl',    g:200},
-
-  // ── Vegetables ──
-  {name:'Aloo Gobi',          cal:130, protein:3.5, carbs:20,  fat:4.5,  unit:'bowl',    g:200},
-  {name:'Baingan Bharta',     cal:100, protein:3.0, carbs:14,  fat:4.0,  unit:'bowl',    g:180},
-  {name:'Bhindi Masala',      cal:115, protein:3.0, carbs:12,  fat:6.0,  unit:'bowl',    g:180},
-  {name:'Mix Veg Sabzi',      cal:120, protein:4.0, carbs:16,  fat:4.5,  unit:'bowl',    g:200},
-  {name:'Aloo Jeera',         cal:165, protein:3.0, carbs:28,  fat:5.0,  unit:'bowl',    g:180},
-  {name:'Pav Bhaji',          cal:290, protein:7.0, carbs:42,  fat:10,   unit:'plate',   g:250},
-  {name:'Sarson da Saag',     cal:140, protein:6.5, carbs:15,  fat:6.0,  unit:'bowl',    g:200},
-  {name:'Lauki Sabzi',        cal:75,  protein:2.5, carbs:12,  fat:2.5,  unit:'bowl',    g:180},
-  {name:'Methi Sabzi',        cal:90,  protein:4.0, carbs:13,  fat:2.5,  unit:'bowl',    g:150},
-
-  // ── Snacks & Street Food ──
-  {name:'Samosa',             cal:130, protein:2.5, carbs:18,  fat:6.0,  unit:'piece',   g:60},
-  {name:'Kachori',            cal:160, protein:4.0, carbs:20,  fat:7.5,  unit:'piece',   g:70},
-  {name:'Vada',               cal:98,  protein:3.5, carbs:13,  fat:4.0,  unit:'piece',   g:50},
-  {name:'Medu Vada',          cal:112, protein:4.0, carbs:15,  fat:4.5,  unit:'piece',   g:55},
-  {name:'Dhokla',             cal:76,  protein:5.0, carbs:12,  fat:1.0,  unit:'piece',   g:50},
-  {name:'Pakoda (mix veg)',   cal:90,  protein:2.5, carbs:11,  fat:4.5,  unit:'piece',   g:40},
-  {name:'Chaat (papdi)',      cal:180, protein:4.5, carbs:28,  fat:6.0,  unit:'serving', g:150},
-  {name:'Pani Puri',          cal:42,  protein:1.0, carbs:8.0, fat:1.0,  unit:'piece',   g:25},
-  {name:'Bhel Puri',          cal:180, protein:5.0, carbs:32,  fat:4.0,  unit:'serving', g:150},
-  {name:'Dahi Vada',          cal:210, protein:9.0, carbs:30,  fat:6.0,  unit:'serving', g:180},
-  {name:'Aloo Tikki',         cal:130, protein:3.0, carbs:22,  fat:4.0,  unit:'piece',   g:80},
-  {name:'Bread Pakoda',       cal:168, protein:4.5, carbs:22,  fat:7.0,  unit:'piece',   g:80},
-
-  // ── Breakfast Specials ──
-  {name:'Pongal',             cal:165, protein:5.0, carbs:30,  fat:3.5,  unit:'bowl',    g:150},
-  {name:'Rava Idli',          cal:85,  protein:3.0, carbs:15,  fat:1.5,  unit:'piece',   g:60},
-  {name:'Pesarattu',          cal:95,  protein:5.5, carbs:15,  fat:2.0,  unit:'piece',   g:70},
-  {name:'Sabudana Khichdi',   cal:280, protein:3.0, carbs:55,  fat:5.5,  unit:'bowl',    g:200},
-  {name:'Vermicelli Upma',    cal:210, protein:5.0, carbs:38,  fat:4.5,  unit:'bowl',    g:160},
-  {name:'Besan Chilla',       cal:135, protein:8.0, carbs:17,  fat:3.5,  unit:'piece',   g:80},
-
-  // ── Soups & Drinks ──
-  {name:'Tomato Soup',        cal:65,  protein:1.5, carbs:12,  fat:1.5,  unit:'bowl',    g:200},
-  {name:'Lassi (sweet)',      cal:155, protein:5.0, carbs:25,  fat:4.5,  unit:'glass',   g:250},
-  {name:'Lassi (salted)',     cal:105, protein:5.0, carbs:12,  fat:4.0,  unit:'glass',   g:250},
-  {name:'Chaas / Buttermilk', cal:40,  protein:3.0, carbs:5,   fat:1.0,  unit:'glass',   g:250},
-  {name:'Masala Chai (milk)', cal:60,  protein:2.5, carbs:9,   fat:1.5,  unit:'cup',     g:150},
-  {name:'Black Tea',          cal:5,   protein:0,   carbs:1,   fat:0,    unit:'cup',     g:200},
-  {name:'Turmeric Milk',      cal:140, protein:7.0, carbs:14,  fat:6.0,  unit:'glass',   g:250},
-  {name:'Coconut Water',      cal:46,  protein:1.7, carbs:9,   fat:0.5,  unit:'glass',   g:240},
-
-  // ── Dairy & Protein ──
-  {name:'Curd / Dahi',        cal:98,  protein:11,  carbs:7,   fat:3.5,  unit:'bowl',    g:200},
-  {name:'Raita',              cal:75,  protein:4.5, carbs:8,   fat:2.5,  unit:'bowl',    g:150},
-  {name:'Milk (full fat)',    cal:61,  protein:3.2, carbs:4.8, fat:3.5,  unit:'glass',   g:200},
-  {name:'Paneer Tikka',       cal:260, protein:18,  carbs:8,   fat:17,   unit:'serving', g:150},
-
-  // ── Rice Dishes ──
-  {name:'Curd Rice',          cal:185, protein:6.0, carbs:32,  fat:3.5,  unit:'bowl',    g:200},
-  {name:'Tamarind Rice',      cal:200, protein:4.0, carbs:38,  fat:4.5,  unit:'bowl',    g:200},
-  {name:'Lemon Rice',         cal:185, protein:3.5, carbs:36,  fat:3.5,  unit:'bowl',    g:200},
-
-  // ── Sweets & Desserts ──
-  {name:'Gulab Jamun',        cal:143, protein:2.0, carbs:26,  fat:4.5,  unit:'piece',   g:60},
-  {name:'Rasgulla',           cal:106, protein:3.5, carbs:21,  fat:1.5,  unit:'piece',   g:80},
-  {name:'Kheer (rice)',       cal:180, protein:5.0, carbs:30,  fat:5.0,  unit:'bowl',    g:150},
-  {name:'Halwa (suji)',       cal:258, protein:4.5, carbs:38,  fat:10,   unit:'serving', g:100},
-  {name:'Ladoo (besan)',      cal:157, protein:3.0, carbs:22,  fat:6.5,  unit:'piece',   g:50},
-  {name:'Jalebi',             cal:150, protein:1.5, carbs:32,  fat:3.0,  unit:'piece',   g:60},
-  {name:'Barfi (milk)',       cal:130, protein:3.5, carbs:18,  fat:5.5,  unit:'piece',   g:40},
-  {name:'Payasam',            cal:190, protein:5.5, carbs:33,  fat:5.0,  unit:'bowl',    g:150},
-
-  // ── Nuts & Seeds ──
-  {name:'Almonds',            cal:58,  protein:2.1, carbs:2.1, fat:5.0,  unit:'piece',   g:7},
-  {name:'Walnuts',            cal:65,  protein:1.5, carbs:1.4, fat:6.5,  unit:'piece',   g:10},
-  {name:'Peanuts (roasted)',  cal:166, protein:7.5, carbs:6,   fat:14,   unit:'tbsp',    g:30},
-  {name:'Cashews',            cal:55,  protein:1.5, carbs:3,   fat:4.5,  unit:'piece',   g:8},
+  // ═══ VEGETARIAN ═══
+  // ── Breads & Rotis ──────────────────────────────
+  {name:'Roti (wheat)',            veg:1, cal:71,  pro:2.7, carb:15,  fat:0.4, unit:'piece'},
+  {name:'Phulka',                  veg:1, cal:55,  pro:2.0, carb:12,  fat:0.3, unit:'piece'},
+  {name:'Paratha (plain)',         veg:1, cal:126, pro:3.1, carb:18,  fat:4.8, unit:'piece'},
+  {name:'Aloo Paratha',            veg:1, cal:200, pro:4.5, carb:30,  fat:7.0, unit:'piece'},
+  {name:'Gobhi Paratha',           veg:1, cal:185, pro:4.0, carb:27,  fat:6.5, unit:'piece'},
+  {name:'Mooli Paratha',           veg:1, cal:170, pro:3.8, carb:25,  fat:6.0, unit:'piece'},
+  {name:'Paneer Paratha',          veg:1, cal:220, pro:9.0, carb:28,  fat:8.5, unit:'piece'},
+  {name:'Methi Paratha',           veg:1, cal:155, pro:4.0, carb:22,  fat:5.5, unit:'piece'},
+  {name:'Puri',                    veg:1, cal:112, pro:2.2, carb:14,  fat:5.5, unit:'piece'},
+  {name:'Naan (plain)',            veg:1, cal:262, pro:8.7, carb:46,  fat:5.1, unit:'piece'},
+  {name:'Butter Naan',             veg:1, cal:300, pro:8.0, carb:46,  fat:9.0, unit:'piece'},
+  {name:'Garlic Naan',             veg:1, cal:280, pro:8.0, carb:46,  fat:7.5, unit:'piece'},
+  {name:'Bhatura',                 veg:1, cal:245, pro:6.0, carb:38,  fat:8.5, unit:'piece'},
+  {name:'Missi Roti',              veg:1, cal:95,  pro:4.5, carb:16,  fat:2.0, unit:'piece'},
+  {name:'Bajra Roti',              veg:1, cal:75,  pro:2.5, carb:15,  fat:1.0, unit:'piece'},
+  {name:'Jowar Roti',              veg:1, cal:70,  pro:2.4, carb:14,  fat:0.8, unit:'piece'},
+  {name:'Makki ki Roti',           veg:1, cal:80,  pro:2.0, carb:16,  fat:1.5, unit:'piece'},
+  {name:'Thalipeeth',              veg:1, cal:165, pro:6.0, carb:28,  fat:3.5, unit:'piece'},
+  {name:'Bread (white)',           veg:1, cal:67,  pro:2.5, carb:13,  fat:0.9, unit:'slice'},
+  {name:'Bread (brown)',           veg:1, cal:60,  pro:3.0, carb:11,  fat:0.8, unit:'slice'},
+  {name:'Bread (multigrain)',      veg:1, cal:55,  pro:3.2, carb:10,  fat:0.9, unit:'slice'},
+  // ── South Indian ────────────────────────────────
+  {name:'Idli',                    veg:1, cal:39,  pro:2.0, carb:7.5, fat:0.2, unit:'piece'},
+  {name:'Rava Idli',               veg:1, cal:85,  pro:3.0, carb:15,  fat:1.5, unit:'piece'},
+  {name:'Dosa (plain)',            veg:1, cal:133, pro:3.5, carb:25,  fat:2.1, unit:'piece'},
+  {name:'Masala Dosa',             veg:1, cal:206, pro:5.0, carb:35,  fat:6.0, unit:'piece'},
+  {name:'Rava Dosa',               veg:1, cal:155, pro:3.5, carb:28,  fat:4.0, unit:'piece'},
+  {name:'Set Dosa',                veg:1, cal:120, pro:3.5, carb:22,  fat:2.5, unit:'piece'},
+  {name:'Uttapam',                 veg:1, cal:118, pro:4.0, carb:22,  fat:2.0, unit:'piece'},
+  {name:'Medu Vada',               veg:1, cal:112, pro:4.0, carb:15,  fat:4.5, unit:'piece'},
+  {name:'Pongal',                  veg:1, cal:165, pro:5.0, carb:30,  fat:3.5, unit:'bowl'},
+  {name:'Pesarattu',               veg:1, cal:95,  pro:5.5, carb:15,  fat:2.0, unit:'piece'},
+  {name:'Appam',                   veg:1, cal:90,  pro:2.5, carb:18,  fat:1.5, unit:'piece'},
+  {name:'Puttu',                   veg:1, cal:120, pro:3.0, carb:24,  fat:1.0, unit:'serving'},
+  {name:'Idiyappam',               veg:1, cal:130, pro:2.5, carb:28,  fat:0.5, unit:'serving'},
+  {name:'Avial',                   veg:1, cal:115, pro:3.0, carb:14,  fat:5.5, unit:'bowl'},
+  {name:'Kootu',                   veg:1, cal:130, pro:5.0, carb:18,  fat:4.0, unit:'bowl'},
+  {name:'Thoran',                  veg:1, cal:110, pro:3.5, carb:12,  fat:5.5, unit:'bowl'},
+  {name:'Sambar',                  veg:1, cal:100, pro:5.5, carb:16,  fat:2.0, unit:'bowl'},
+  {name:'Rasam',                   veg:1, cal:60,  pro:2.0, carb:10,  fat:1.5, unit:'bowl'},
+  {name:'Bisi Bele Bath',          veg:1, cal:210, pro:8.0, carb:35,  fat:5.0, unit:'bowl'},
+  {name:'Curd Rice',               veg:1, cal:185, pro:6.0, carb:32,  fat:3.5, unit:'bowl'},
+  {name:'Tamarind Rice',           veg:1, cal:200, pro:4.0, carb:38,  fat:4.5, unit:'bowl'},
+  {name:'Lemon Rice',              veg:1, cal:185, pro:3.5, carb:36,  fat:3.5, unit:'bowl'},
+  {name:'Coconut Rice',            veg:1, cal:220, pro:3.5, carb:38,  fat:6.0, unit:'bowl'},
+  // ── Breakfast & Tiffin ──────────────────────────
+  {name:'Poha',                    veg:1, cal:180, pro:3.5, carb:35,  fat:3.0, unit:'bowl'},
+  {name:'Upma',                    veg:1, cal:195, pro:4.5, carb:33,  fat:5.5, unit:'bowl'},
+  {name:'Vermicelli Upma',         veg:1, cal:210, pro:5.0, carb:38,  fat:4.5, unit:'bowl'},
+  {name:'Sabudana Khichdi',        veg:1, cal:280, pro:3.0, carb:55,  fat:5.5, unit:'bowl'},
+  {name:'Besan Chilla',            veg:1, cal:135, pro:8.0, carb:17,  fat:3.5, unit:'piece'},
+  {name:'Moong Dal Chilla',        veg:1, cal:120, pro:9.0, carb:16,  fat:2.5, unit:'piece'},
+  {name:'Oats (cooked)',           veg:1, cal:150, pro:5.0, carb:27,  fat:2.5, unit:'bowl'},
+  {name:'Daliya (broken wheat)',   veg:1, cal:160, pro:5.5, carb:30,  fat:1.5, unit:'bowl'},
+  {name:'Cornflakes with milk',    veg:1, cal:190, pro:7.0, carb:36,  fat:2.5, unit:'bowl'},
+  {name:'Muesli with milk',        veg:1, cal:240, pro:8.0, carb:42,  fat:5.0, unit:'bowl'},
+  {name:'Granola',                 veg:1, cal:220, pro:5.0, carb:38,  fat:6.0, unit:'serving'},
+  {name:'Greek Yogurt (plain)',    veg:1, cal:100, pro:17,  carb:6,   fat:0.7, unit:'cup'},
+  // ── Rice Dishes ─────────────────────────────────
+  {name:'Rice (steamed)',          veg:1, cal:130, pro:2.7, carb:28,  fat:0.3, unit:'cup'},
+  {name:'Brown Rice',              veg:1, cal:115, pro:2.5, carb:24,  fat:0.9, unit:'cup'},
+  {name:'Jeera Rice',              veg:1, cal:150, pro:3.0, carb:30,  fat:2.5, unit:'cup'},
+  {name:'Veg Biryani',             veg:1, cal:290, pro:7.0, carb:52,  fat:6.5, unit:'plate'},
+  {name:'Veg Pulao',               veg:1, cal:210, pro:5.0, carb:40,  fat:3.5, unit:'cup'},
+  {name:'Khichdi',                 veg:1, cal:180, pro:7.5, carb:33,  fat:2.5, unit:'bowl'},
+  {name:'Tomato Rice',             veg:1, cal:175, pro:3.5, carb:34,  fat:3.5, unit:'bowl'},
+  // ── Dals & Lentils ──────────────────────────────
+  {name:'Dal Tadka',               veg:1, cal:115, pro:7.5, carb:18,  fat:2.5, unit:'bowl'},
+  {name:'Dal Fry',                 veg:1, cal:125, pro:7.0, carb:19,  fat:3.5, unit:'bowl'},
+  {name:'Dal Makhani',             veg:1, cal:185, pro:9.0, carb:22,  fat:6.5, unit:'bowl'},
+  {name:'Chana Dal',               veg:1, cal:160, pro:9.5, carb:24,  fat:2.5, unit:'bowl'},
+  {name:'Moong Dal',               veg:1, cal:105, pro:7.0, carb:17,  fat:0.5, unit:'bowl'},
+  {name:'Masoor Dal',              veg:1, cal:120, pro:9.0, carb:18,  fat:0.8, unit:'bowl'},
+  {name:'Urad Dal',                veg:1, cal:140, pro:9.5, carb:20,  fat:1.5, unit:'bowl'},
+  {name:'Toor Dal',                veg:1, cal:115, pro:7.0, carb:19,  fat:1.0, unit:'bowl'},
+  {name:'Panchmel Dal',            veg:1, cal:160, pro:10,  carb:24,  fat:3.0, unit:'bowl'},
+  {name:'Rajma',                   veg:1, cal:215, pro:13,  carb:35,  fat:1.5, unit:'bowl'},
+  {name:'Chole (Chana Masala)',    veg:1, cal:270, pro:14,  carb:42,  fat:6.0, unit:'bowl'},
+  {name:'Kadhi (plain)',           veg:1, cal:150, pro:5.0, carb:18,  fat:6.0, unit:'bowl'},
+  {name:'Kadhi Pakoda',            veg:1, cal:220, pro:7.5, carb:24,  fat:10,  unit:'bowl'},
+  {name:'Lobhia (black eyed peas)',veg:1, cal:190, pro:11,  carb:30,  fat:2.0, unit:'bowl'},
+  {name:'Chhole Saag',             veg:1, cal:230, pro:12,  carb:35,  fat:6.0, unit:'bowl'},
+  // ── Paneer ──────────────────────────────────────
+  {name:'Paneer (raw)',            veg:1, cal:265, pro:18,  carb:3,   fat:20,  unit:'100g'},
+  {name:'Paneer Butter Masala',    veg:1, cal:290, pro:14,  carb:12,  fat:21,  unit:'bowl'},
+  {name:'Palak Paneer',            veg:1, cal:260, pro:15,  carb:10,  fat:18,  unit:'bowl'},
+  {name:'Shahi Paneer',            veg:1, cal:310, pro:14,  carb:14,  fat:23,  unit:'bowl'},
+  {name:'Paneer Bhurji',           veg:1, cal:240, pro:15,  carb:7,   fat:17,  unit:'bowl'},
+  {name:'Matar Paneer',            veg:1, cal:245, pro:13,  carb:16,  fat:15,  unit:'bowl'},
+  {name:'Paneer Tikka',            veg:1, cal:260, pro:18,  carb:8,   fat:17,  unit:'serving'},
+  {name:'Kadai Paneer',            veg:1, cal:275, pro:14,  carb:11,  fat:20,  unit:'bowl'},
+  {name:'Paneer Do Pyaza',         veg:1, cal:265, pro:14,  carb:12,  fat:19,  unit:'bowl'},
+  // ── Vegetables ──────────────────────────────────
+  {name:'Aloo Gobi',               veg:1, cal:130, pro:3.5, carb:20,  fat:4.5, unit:'bowl'},
+  {name:'Baingan Bharta',          veg:1, cal:100, pro:3.0, carb:14,  fat:4.0, unit:'bowl'},
+  {name:'Bhindi Masala',           veg:1, cal:115, pro:3.0, carb:12,  fat:6.0, unit:'bowl'},
+  {name:'Mix Veg Sabzi',           veg:1, cal:120, pro:4.0, carb:16,  fat:4.5, unit:'bowl'},
+  {name:'Aloo Jeera',              veg:1, cal:165, pro:3.0, carb:28,  fat:5.0, unit:'bowl'},
+  {name:'Aloo Matar',              veg:1, cal:155, pro:5.5, carb:24,  fat:4.5, unit:'bowl'},
+  {name:'Matar Mushroom',          veg:1, cal:140, pro:6.0, carb:18,  fat:5.0, unit:'bowl'},
+  {name:'Lauki Sabzi',             veg:1, cal:75,  pro:2.5, carb:12,  fat:2.5, unit:'bowl'},
+  {name:'Tinda Sabzi',             veg:1, cal:70,  pro:2.0, carb:11,  fat:2.5, unit:'bowl'},
+  {name:'Methi Sabzi',             veg:1, cal:90,  pro:4.0, carb:13,  fat:2.5, unit:'bowl'},
+  {name:'Sarson da Saag',          veg:1, cal:140, pro:6.5, carb:15,  fat:6.0, unit:'bowl'},
+  {name:'Palak Sabzi',             veg:1, cal:85,  pro:5.0, carb:10,  fat:3.0, unit:'bowl'},
+  {name:'Arbi Sabzi',              veg:1, cal:150, pro:3.0, carb:25,  fat:4.5, unit:'bowl'},
+  {name:'Karela Sabzi',            veg:1, cal:80,  pro:2.5, carb:10,  fat:3.5, unit:'bowl'},
+  {name:'Capsicum Masala',         veg:1, cal:100, pro:2.5, carb:12,  fat:5.0, unit:'bowl'},
+  {name:'Pav Bhaji',               veg:1, cal:290, pro:7.0, carb:42,  fat:10,  unit:'plate'},
+  {name:'Undhiyu',                 veg:1, cal:210, pro:7.0, carb:28,  fat:8.0, unit:'bowl'},
+  {name:'Mushroom Masala',         veg:1, cal:145, pro:5.5, carb:14,  fat:8.0, unit:'bowl'},
+  {name:'Jackfruit Sabzi',         veg:1, cal:120, pro:3.5, carb:20,  fat:3.5, unit:'bowl'},
+  {name:'Soya Chunks Curry',       veg:1, cal:210, pro:20,  carb:18,  fat:5.0, unit:'bowl'},
+  {name:'Tofu Bhurji',             veg:1, cal:145, pro:12,  carb:5,   fat:8.5, unit:'bowl'},
+  // ── Snacks & Street Food ────────────────────────
+  {name:'Samosa',                  veg:1, cal:130, pro:2.5, carb:18,  fat:6.0, unit:'piece'},
+  {name:'Kachori',                 veg:1, cal:160, pro:4.0, carb:20,  fat:7.5, unit:'piece'},
+  {name:'Vada',                    veg:1, cal:98,  pro:3.5, carb:13,  fat:4.0, unit:'piece'},
+  {name:'Dhokla',                  veg:1, cal:76,  pro:5.0, carb:12,  fat:1.0, unit:'piece'},
+  {name:'Khandvi',                 veg:1, cal:80,  pro:4.5, carb:10,  fat:2.5, unit:'serving'},
+  {name:'Pakoda (mix veg)',        veg:1, cal:90,  pro:2.5, carb:11,  fat:4.5, unit:'piece'},
+  {name:'Mirchi Bajji',            veg:1, cal:110, pro:2.5, carb:14,  fat:5.0, unit:'piece'},
+  {name:'Chaat (papdi)',           veg:1, cal:180, pro:4.5, carb:28,  fat:6.0, unit:'serving'},
+  {name:'Pani Puri',               veg:1, cal:42,  pro:1.0, carb:8.0, fat:1.0, unit:'piece'},
+  {name:'Bhel Puri',               veg:1, cal:180, pro:5.0, carb:32,  fat:4.0, unit:'serving'},
+  {name:'Dahi Vada',               veg:1, cal:210, pro:9.0, carb:30,  fat:6.0, unit:'serving'},
+  {name:'Aloo Tikki',              veg:1, cal:130, pro:3.0, carb:22,  fat:4.0, unit:'piece'},
+  {name:'Bread Pakoda',            veg:1, cal:168, pro:4.5, carb:22,  fat:7.0, unit:'piece'},
+  {name:'Vada Pav',                veg:1, cal:280, pro:7.0, carb:40,  fat:9.5, unit:'piece'},
+  {name:'Misal Pav',               veg:1, cal:320, pro:12,  carb:48,  fat:9.0, unit:'plate'},
+  {name:'Pav Bhaji',               veg:1, cal:290, pro:7.0, carb:42,  fat:10,  unit:'plate'},
+  {name:'Sev Puri',                veg:1, cal:165, pro:3.5, carb:26,  fat:5.5, unit:'serving'},
+  {name:'Dahi Puri',               veg:1, cal:190, pro:5.0, carb:30,  fat:5.5, unit:'serving'},
+  {name:'Corn Chaat',              veg:1, cal:150, pro:4.0, carb:28,  fat:3.5, unit:'bowl'},
+  {name:'Peanut Chaat',            veg:1, cal:190, pro:8.0, carb:16,  fat:11,  unit:'bowl'},
+  {name:'Momos (veg, steamed)',    veg:1, cal:160, pro:5.5, carb:28,  fat:2.5, unit:'serving'},
+  {name:'Momos (veg, fried)',      veg:1, cal:230, pro:5.5, carb:28,  fat:10,  unit:'serving'},
+  {name:'Spring Roll (veg)',       veg:1, cal:115, pro:2.5, carb:15,  fat:5.0, unit:'piece'},
+  // ── Dairy & Beverages ───────────────────────────
+  {name:'Curd / Dahi',             veg:1, cal:98,  pro:11,  carb:7,   fat:3.5, unit:'bowl'},
+  {name:'Raita',                   veg:1, cal:75,  pro:4.5, carb:8,   fat:2.5, unit:'bowl'},
+  {name:'Lassi (sweet)',           veg:1, cal:155, pro:5.0, carb:25,  fat:4.5, unit:'glass'},
+  {name:'Lassi (salted)',          veg:1, cal:105, pro:5.0, carb:12,  fat:4.0, unit:'glass'},
+  {name:'Chaas / Buttermilk',      veg:1, cal:40,  pro:3.0, carb:5,   fat:1.0, unit:'glass'},
+  {name:'Milk (full fat)',         veg:1, cal:61,  pro:3.2, carb:4.8, fat:3.5, unit:'glass'},
+  {name:'Milk (toned)',            veg:1, cal:46,  pro:3.5, carb:4.6, fat:1.5, unit:'glass'},
+  {name:'Turmeric Milk',           veg:1, cal:140, pro:7.0, carb:14,  fat:6.0, unit:'glass'},
+  {name:'Mango Lassi',             veg:1, cal:180, pro:5.0, carb:32,  fat:3.5, unit:'glass'},
+  {name:'Rose Milk',               veg:1, cal:130, pro:4.0, carb:22,  fat:3.5, unit:'glass'},
+  {name:'Masala Chai (milk)',      veg:1, cal:60,  pro:2.5, carb:9,   fat:1.5, unit:'cup'},
+  {name:'Black Tea',               veg:1, cal:5,   pro:0,   carb:1,   fat:0,   unit:'cup'},
+  {name:'Black Coffee',            veg:1, cal:5,   pro:0.3, carb:0,   fat:0,   unit:'cup'},
+  {name:'Coffee with milk',        veg:1, cal:55,  pro:2.5, carb:7,   fat:2.0, unit:'cup'},
+  {name:'Coconut Water',           veg:1, cal:46,  pro:1.7, carb:9,   fat:0.5, unit:'glass'},
+  {name:'Nimbu Pani',              veg:1, cal:30,  pro:0.2, carb:8,   fat:0,   unit:'glass'},
+  {name:'Aam Panna',               veg:1, cal:70,  pro:0.5, carb:18,  fat:0,   unit:'glass'},
+  {name:'Orange Juice (fresh)',    veg:1, cal:112, pro:1.7, carb:26,  fat:0.5, unit:'glass'},
+  {name:'Protein Shake (whey)',    veg:1, cal:130, pro:25,  carb:5,   fat:2.0, unit:'serving'},
+  // ── Fruits ──────────────────────────────────────
+  {name:'Banana',                  veg:1, cal:89,  pro:1.1, carb:23,  fat:0.3, unit:'piece'},
+  {name:'Apple',                   veg:1, cal:52,  pro:0.3, carb:14,  fat:0.2, unit:'piece'},
+  {name:'Mango (100g)',            veg:1, cal:60,  pro:0.8, carb:15,  fat:0.4, unit:'serving'},
+  {name:'Papaya (1 cup)',          veg:1, cal:43,  pro:0.5, carb:11,  fat:0.3, unit:'cup'},
+  {name:'Guava',                   veg:1, cal:68,  pro:2.6, carb:14,  fat:1.0, unit:'piece'},
+  {name:'Orange',                  veg:1, cal:47,  pro:0.9, carb:12,  fat:0.1, unit:'piece'},
+  {name:'Pomegranate (1 cup)',     veg:1, cal:83,  pro:1.7, carb:19,  fat:1.2, unit:'cup'},
+  {name:'Watermelon (1 cup)',      veg:1, cal:30,  pro:0.6, carb:8,   fat:0.2, unit:'cup'},
+  {name:'Grapes (1 cup)',          veg:1, cal:69,  pro:0.7, carb:18,  fat:0.2, unit:'cup'},
+  {name:'Pear',                    veg:1, cal:57,  pro:0.4, carb:15,  fat:0.1, unit:'piece'},
+  {name:'Chikoo / Sapota',         veg:1, cal:83,  pro:0.4, carb:20,  fat:1.1, unit:'piece'},
+  {name:'Litchi (100g)',           veg:1, cal:66,  pro:0.8, carb:17,  fat:0.4, unit:'serving'},
+  // ── Nuts & Seeds ────────────────────────────────
+  {name:'Almonds (6 pieces)',      veg:1, cal:42,  pro:1.5, carb:1.5, fat:3.6, unit:'serving'},
+  {name:'Walnuts (4 halves)',      veg:1, cal:65,  pro:1.5, carb:1.4, fat:6.5, unit:'serving'},
+  {name:'Peanuts (roasted, tbsp)', veg:1, cal:166, pro:7.5, carb:6,   fat:14,  unit:'tbsp'},
+  {name:'Cashews (10 pieces)',     veg:1, cal:55,  pro:1.5, carb:3,   fat:4.5, unit:'serving'},
+  {name:'Peanut Butter',           veg:1, cal:90,  pro:4.0, carb:3,   fat:8.0, unit:'tbsp'},
+  {name:'Mixed Nuts (handful)',    veg:1, cal:170, pro:5.0, carb:7,   fat:15,  unit:'serving'},
+  {name:'Sunflower Seeds',         veg:1, cal:85,  pro:3.0, carb:3.5, fat:7.5, unit:'tbsp'},
+  {name:'Flaxseeds',               veg:1, cal:55,  pro:1.9, carb:3,   fat:4.3, unit:'tbsp'},
+  {name:'Chia Seeds',              veg:1, cal:58,  pro:2.0, carb:5,   fat:3.7, unit:'tbsp'},
+  // ── Sweets & Desserts ───────────────────────────
+  {name:'Gulab Jamun',             veg:1, cal:143, pro:2.0, carb:26,  fat:4.5, unit:'piece'},
+  {name:'Rasgulla',                veg:1, cal:106, pro:3.5, carb:21,  fat:1.5, unit:'piece'},
+  {name:'Kheer (rice)',            veg:1, cal:180, pro:5.0, carb:30,  fat:5.0, unit:'bowl'},
+  {name:'Halwa (suji)',            veg:1, cal:258, pro:4.5, carb:38,  fat:10,  unit:'serving'},
+  {name:'Gajar Halwa',             veg:1, cal:210, pro:4.0, carb:32,  fat:8.0, unit:'bowl'},
+  {name:'Ladoo (besan)',           veg:1, cal:157, pro:3.0, carb:22,  fat:6.5, unit:'piece'},
+  {name:'Ladoo (motichoor)',       veg:1, cal:140, pro:2.5, carb:23,  fat:5.0, unit:'piece'},
+  {name:'Jalebi',                  veg:1, cal:150, pro:1.5, carb:32,  fat:3.0, unit:'piece'},
+  {name:'Barfi (milk)',            veg:1, cal:130, pro:3.5, carb:18,  fat:5.5, unit:'piece'},
+  {name:'Shrikhand',               veg:1, cal:195, pro:7.0, carb:30,  fat:5.5, unit:'bowl'},
+  {name:'Kulfi',                   veg:1, cal:155, pro:4.5, carb:22,  fat:5.5, unit:'piece'},
+  {name:'Ice Cream (vanilla)',     veg:1, cal:137, pro:2.5, carb:16,  fat:7.0, unit:'scoop'},
+  {name:'Payasam',                 veg:1, cal:190, pro:5.5, carb:33,  fat:5.0, unit:'bowl'},
+  {name:'Rabri',                   veg:1, cal:225, pro:7.0, carb:30,  fat:9.0, unit:'bowl'},
+  // ═══ NON-VEGETARIAN ═══
+  // ── Chicken ─────────────────────────────────────
+  {name:'Chicken Breast (grilled)',veg:0, cal:165, pro:31,  carb:0,   fat:3.6, unit:'100g'},
+  {name:'Chicken Thigh (grilled)', veg:0, cal:209, pro:26,  carb:0,   fat:11,  unit:'100g'},
+  {name:'Chicken Curry',           veg:0, cal:250, pro:25,  carb:8,   fat:14,  unit:'bowl'},
+  {name:'Butter Chicken',          veg:0, cal:290, pro:24,  carb:12,  fat:17,  unit:'bowl'},
+  {name:'Chicken Tikka Masala',    veg:0, cal:280, pro:26,  carb:10,  fat:15,  unit:'bowl'},
+  {name:'Chicken Tikka',           veg:0, cal:195, pro:28,  carb:5,   fat:7.5, unit:'serving'},
+  {name:'Chicken Biryani',         veg:0, cal:360, pro:22,  carb:52,  fat:8.0, unit:'plate'},
+  {name:'Tandoori Chicken',        veg:0, cal:185, pro:27,  carb:4,   fat:7.0, unit:'piece'},
+  {name:'Chicken Kebab',           veg:0, cal:165, pro:22,  carb:5,   fat:6.5, unit:'piece'},
+  {name:'Chicken Seekh Kebab',     veg:0, cal:175, pro:20,  carb:4,   fat:9.0, unit:'piece'},
+  {name:'Chicken 65',              veg:0, cal:240, pro:22,  carb:10,  fat:13,  unit:'serving'},
+  {name:'Chicken Lollipop',        veg:0, cal:145, pro:14,  carb:8,   fat:6.0, unit:'piece'},
+  {name:'Palak Chicken',           veg:0, cal:235, pro:24,  carb:8,   fat:12,  unit:'bowl'},
+  {name:'Chicken Korma',           veg:0, cal:310, pro:24,  carb:10,  fat:20,  unit:'bowl'},
+  {name:'Chicken Rogan Josh',      veg:0, cal:265, pro:25,  carb:8,   fat:15,  unit:'bowl'},
+  {name:'Chicken Keema',           veg:0, cal:275, pro:24,  carb:6,   fat:17,  unit:'bowl'},
+  {name:'Chicken Fried Rice',      veg:0, cal:310, pro:18,  carb:42,  fat:8.0, unit:'plate'},
+  {name:'Chicken Wrap',            veg:0, cal:350, pro:28,  carb:35,  fat:10,  unit:'piece'},
+  {name:'Chicken Sandwich',        veg:0, cal:290, pro:22,  carb:30,  fat:9.0, unit:'piece'},
+  {name:'Chicken Momos (steamed)', veg:0, cal:185, pro:15,  carb:24,  fat:4.0, unit:'serving'},
+  {name:'Chicken Momos (fried)',   veg:0, cal:255, pro:15,  carb:24,  fat:11,  unit:'serving'},
+  {name:'Chicken Stew',            veg:0, cal:215, pro:22,  carb:10,  fat:10,  unit:'bowl'},
+  {name:'Chicken Rezala',          veg:0, cal:295, pro:23,  carb:7,   fat:19,  unit:'bowl'},
+  {name:'Chicken Chettinad',       veg:0, cal:270, pro:24,  carb:9,   fat:16,  unit:'bowl'},
+  {name:'Chicken Changezi',        veg:0, cal:310, pro:24,  carb:12,  fat:20,  unit:'bowl'},
+  // ── Mutton & Lamb ────────────────────────────────
+  {name:'Mutton Curry',            veg:0, cal:295, pro:26,  carb:5,   fat:19,  unit:'bowl'},
+  {name:'Mutton Biryani',          veg:0, cal:390, pro:24,  carb:52,  fat:10,  unit:'plate'},
+  {name:'Mutton Rogan Josh',       veg:0, cal:310, pro:28,  carb:6,   fat:20,  unit:'bowl'},
+  {name:'Mutton Keema',            veg:0, cal:320, pro:25,  carb:5,   fat:22,  unit:'bowl'},
+  {name:'Mutton Seekh Kebab',      veg:0, cal:200, pro:22,  carb:4,   fat:11,  unit:'piece'},
+  {name:'Mutton Nihari',           veg:0, cal:350, pro:28,  carb:8,   fat:23,  unit:'bowl'},
+  {name:'Mutton Korma',            veg:0, cal:340, pro:26,  carb:9,   fat:23,  unit:'bowl'},
+  {name:'Lamb Chops (grilled)',    veg:0, cal:200, pro:23,  carb:0,   fat:12,  unit:'piece'},
+  {name:'Mutton Paya',             veg:0, cal:260, pro:20,  carb:4,   fat:18,  unit:'bowl'},
+  {name:'Mutton Kofta Curry',      veg:0, cal:305, pro:24,  carb:8,   fat:20,  unit:'bowl'},
+  // ── Fish & Seafood ───────────────────────────────
+  {name:'Fish Curry',              veg:0, cal:220, pro:24,  carb:7,   fat:11,  unit:'bowl'},
+  {name:'Fish Fry',                veg:0, cal:215, pro:22,  carb:8,   fat:11,  unit:'piece'},
+  {name:'Fish Tandoori',           veg:0, cal:175, pro:24,  carb:5,   fat:7.0, unit:'serving'},
+  {name:'Pomfret Fry',             veg:0, cal:195, pro:22,  carb:6,   fat:10,  unit:'piece'},
+  {name:'Rohu Fish Curry',         veg:0, cal:205, pro:22,  carb:6,   fat:10,  unit:'bowl'},
+  {name:'Surmai / King Fish Fry',  veg:0, cal:190, pro:24,  carb:5,   fat:9.0, unit:'piece'},
+  {name:'Prawn Masala',            veg:0, cal:210, pro:24,  carb:8,   fat:9.0, unit:'bowl'},
+  {name:'Prawn Biryani',           veg:0, cal:340, pro:20,  carb:50,  fat:7.0, unit:'plate'},
+  {name:'Prawn Fry',               veg:0, cal:185, pro:22,  carb:5,   fat:9.0, unit:'serving'},
+  {name:'Crab Curry',              veg:0, cal:195, pro:22,  carb:6,   fat:9.0, unit:'bowl'},
+  {name:'Tuna (canned, 100g)',     veg:0, cal:132, pro:28,  carb:0,   fat:1.5, unit:'100g'},
+  {name:'Salmon (grilled, 150g)',  veg:0, cal:208, pro:28,  carb:0,   fat:10,  unit:'serving'},
+  {name:'Fish Molee',              veg:0, cal:235, pro:23,  carb:6,   fat:13,  unit:'bowl'},
+  {name:'Prawn Koliwada',          veg:0, cal:220, pro:22,  carb:10,  fat:11,  unit:'serving'},
+  // ── Eggs ─────────────────────────────────────────
+  {name:'Egg (boiled)',            veg:0, cal:78,  pro:6.3, carb:0.6, fat:5.3, unit:'piece'},
+  {name:'Egg (fried)',             veg:0, cal:90,  pro:6.3, carb:0.4, fat:7.0, unit:'piece'},
+  {name:'Egg Bhurji',              veg:0, cal:180, pro:13,  carb:3,   fat:13,  unit:'serving'},
+  {name:'Omelette (2 eggs)',       veg:0, cal:185, pro:13,  carb:2,   fat:14,  unit:'serving'},
+  {name:'Egg Curry',               veg:0, cal:215, pro:14,  carb:8,   fat:15,  unit:'bowl'},
+  {name:'Egg Biryani',             veg:0, cal:330, pro:16,  carb:50,  fat:8.0, unit:'plate'},
+  {name:'Egg Fried Rice',          veg:0, cal:290, pro:14,  carb:40,  fat:8.5, unit:'plate'},
+  {name:'Egg Paratha',             veg:0, cal:230, pro:10,  carb:28,  fat:9.0, unit:'piece'},
+  {name:'Egg Roll',                veg:0, cal:280, pro:12,  carb:34,  fat:10,  unit:'piece'},
+  {name:'Egg Half Fry',            veg:0, cal:85,  pro:6.0, carb:0.4, fat:6.5, unit:'piece'},
+  // ── Misc Non-Veg ─────────────────────────────────
+  {name:'Keema Pav',               veg:0, cal:380, pro:22,  carb:42,  fat:13,  unit:'plate'},
+  {name:'Nihari',                  veg:0, cal:330, pro:26,  carb:9,   fat:22,  unit:'bowl'},
+  {name:'Haleem',                  veg:0, cal:295, pro:22,  carb:28,  fat:10,  unit:'bowl'},
+  {name:'Nahari Gosht',            veg:0, cal:310, pro:25,  carb:8,   fat:20,  unit:'bowl'},
 ];
+
 
 // Daily targets (default, can be personalised)
 const DAILY_TARGETS = {cal:2000, protein:120, carbs:250, fat:65};
@@ -1655,23 +2048,47 @@ function setMealType(type,btn){
 }
 
 // ── Food search ──
+let _foodVegFilter='all'; // 'all' | 'veg' | 'nonveg'
+function setFoodFilter(f,btn){
+  _foodVegFilter=f;
+  document.querySelectorAll('.food-filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  searchFood(document.getElementById('food-search').value);
+}
+function normFood(f){
+  // handle both old {cal,protein,carbs,fat} and new {cal,pro,carb,fat} field names
+  return { ...f,
+    protein: f.protein ?? f.pro ?? 0,
+    carbs:   f.carbs   ?? f.carb ?? 0,
+    fat:     f.fat     ?? 0,
+    veg:     f.veg     ?? 1,
+  };
+}
 function searchFood(query){
   const box=document.getElementById('food-suggestions');
   if(!query||query.length<2){box.style.display='none';return;}
   const q=query.toLowerCase();
-  const customFoods=getCustomFoods();
+  const customFoods=getCustomFoods().map(f=>({...f,veg:1}));
   const allFoods=[...FOOD_DB,...customFoods];
-  const results=allFoods.filter(f=>f.name.toLowerCase().includes(q)).slice(0,10);
-  if(!results.length){box.style.display='none';return;}
+  const filtered=allFoods.filter(f=>{
+    if(!f.name.toLowerCase().includes(q)) return false;
+    if(_foodVegFilter==='veg')    return f.veg===1;
+    if(_foodVegFilter==='nonveg') return f.veg===0;
+    return true;
+  }).slice(0,12);
+  if(!filtered.length){box.style.display='none';return;}
   box.style.display='block';
-  box.innerHTML=results.map(f=>`
-    <div class="food-sug-item" onclick='selectFood(${JSON.stringify(f).replace(/'/g,"&#39;")})'>
-      <span>${esc(f.name)}${f.custom?' <span style="font-size:10px;color:var(--teal)">custom</span>':''}</span>
-      <span class="food-sug-cal">${f.cal} kcal / ${f.unit}</span>
-    </div>`).join('');
-}
-
-function selectFood(f){
+  box.innerHTML=window._foodResults.map((f,i)=>{
+    const icon=f.veg===0?'&#x1F357;':'&#x1F7E2;';
+    const custom=f.custom?'<span style="font-size:10px;color:var(--teal)"> custom</span>':'';
+    return '<div class="food-sug-item" onclick="selectFoodByIndex('+i+')">'
+      +'<span><span style="font-size:11px;margin-right:4px">'+icon+'</span>'
+      +esc(f.name)+custom+'</span>'
+      +'<span class="food-sug-cal">'+f.cal+' kcal / '+f.unit+'</span>'
+      +'</div>';
+  }).join('');
+}function selectFoodByIndex(i){ selectFood(window._foodResults[i]||{}); }
+function selectFood(f){ f=normFood(f);
   selectedFood=f;
   document.getElementById('food-search').value=f.name;
   document.getElementById('food-unit').value=f.unit;
@@ -1698,9 +2115,9 @@ function updateMacroPreview(){
   }
   const qty=parseFloat(document.getElementById('food-qty').value)||1;
   const c=Math.round(selectedFood.cal*qty);
-  const p=(selectedFood.protein*qty).toFixed(1);
-  const cb=(selectedFood.carbs*qty).toFixed(1);
-  const ft=(selectedFood.fat*qty).toFixed(1);
+  const p=((selectedFood.protein||selectedFood.pro||0)*qty).toFixed(1);
+  const cb=((selectedFood.carbs||selectedFood.carb||0)*qty).toFixed(1);
+  const ft=((selectedFood.fat||0)*qty).toFixed(1);
   document.getElementById('prev-cal').textContent=c?c+'kcal':'?';
   document.getElementById('prev-pro').textContent=p>0?p+'g':'?';
   document.getElementById('prev-carb').textContent=cb>0?cb+'g':'?';
@@ -1718,9 +2135,10 @@ function logFoodEntry(){
     name:selectedFood.name,
     qty, unit:selectedFood.unit,
     cal:Math.round(selectedFood.cal*qty),
-    protein:parseFloat((selectedFood.protein*qty).toFixed(1)),
-    carbs:parseFloat((selectedFood.carbs*qty).toFixed(1)),
-    fat:parseFloat((selectedFood.fat*qty).toFixed(1)),
+    protein:parseFloat(((selectedFood.protein||selectedFood.pro||0)*qty).toFixed(1)),
+    carbs:parseFloat(((selectedFood.carbs||selectedFood.carb||0)*qty).toFixed(1)),
+    fat:parseFloat(((selectedFood.fat||0)*qty).toFixed(1)),
+    veg: selectedFood.veg!==undefined ? selectedFood.veg : 1,
     custom:!!selectedFood.custom,
     time:new Date().toTimeString().slice(0,5)
   });
@@ -2489,17 +2907,21 @@ function renderMoMComparison() {
 // ═══════════════════════════════════════════════════════════════════
 
 
-loadLocal();
-if(!state.items.length){state.items=MY_ROUTINE;save();}
-const _s=getSettings();
-applyTheme(_s.theme);
-document.querySelector && document.querySelector('.topbar-title') && (() => {
-  const titleEl = document.querySelector('.topbar-title');
-  if(titleEl) titleEl.innerHTML = `<i class="ti ti-layout-dashboard"></i> ${esc(_s.name)} <div class="sync-dot" id="sync-dot" title="sync status"></div>`;
-})();
-setSyncDot(window.FIREBASE_READY?'live':'off');
-renderToday();
-if('Notification' in window&&Notification.permission==='default')Notification.requestPermission();
+// ── Boot: apply theme first, then let auth handle rendering ──
+const _bootSettings = getSettings();
+applyTheme(_bootSettings.theme);
+// Auth module handles calling renderCurrentOrBoot() after sign-in
+// For offline mode without Firebase, auto-check happens in the module timeout
+// If no Firebase and no active user found within 200ms, show auth
+setTimeout(() => {
+  if(!window._currentUser) {
+    showAuthScreen();
+    // pre-populate offline note
+    const noteEl = document.getElementById('auth-offline-note');
+    if(noteEl && !window.FIREBASE_READY) noteEl.textContent = '⚠ Offline mode: accounts stored on this device only.';
+  }
+}, 250);
+if('Notification' in window&&Notification.permission==='default') Notification.requestPermission();
 setInterval(checkReminders,60000);
 </script>
 </body>
