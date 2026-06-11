@@ -8,6 +8,10 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Routine">
 <title>Routine Tracker</title>
+<link rel="manifest" href="manifest.json">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" sizes="192x192" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%231D9E75'/><text y='.9em' font-size='70' x='15'>📋</text></svg>">
+
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
@@ -20,7 +24,7 @@ import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
 
 // ─── STEP 1: paste your Firebase config here ────────────────────────
 const FIREBASE_CONFIG = {
- apiKey: "AIzaSyBcJgURkeBthHabtHjq130U9SEeIpR4IU8",
+  apiKey: "AIzaSyBcJgURkeBthHabtHjq130U9SEeIpR4IU8",
   authDomain: "dig-routine-tracker.firebaseapp.com",
   projectId: "dig-routine-tracker",
   storageBucket: "dig-routine-tracker.firebasestorage.app",
@@ -84,7 +88,13 @@ if (FIREBASE_READY) {
     await updateProfile(cred.user, { displayName: name });
   };
   window._authSignIn = (email, pass) => signInWithEmailAndPassword(auth, email, pass);
-  window._authSignOut = () => { if (unsub){unsub();unsub=null;} signOut(auth); };
+  window._authSignOut = () => {
+    window._currentUser = null;
+    localStorage.removeItem('rt_activeUser');
+    state.items=[]; state.completions={}; state.workLogs={};
+    state.mealLogs={}; state.bodyMetrics=[]; state.waterLog={};
+    showAuthScreen();
+  };
 
 } else {
   // Offline mode – use local profile picker
@@ -123,7 +133,27 @@ if (FIREBASE_READY) {
   }, 100);
 }
 
-function showAuthScreen()  { const el=document.getElementById('auth-screen'); if(el) el.style.display='flex'; }
+function showAuthScreen() {
+  const el = document.getElementById('auth-screen');
+  if (el) el.style.display = 'flex';
+  // Reset form state so it works after sign-out
+  const btn = document.getElementById('auth-submit-btn');
+  if (btn) { btn.disabled = false; btn.textContent = 'Sign in'; }
+  const err = document.getElementById('auth-error');
+  if (err) err.textContent = '';
+  const emailEl = document.getElementById('auth-email');
+  const passEl  = document.getElementById('auth-pass');
+  if (emailEl) emailEl.value = '';
+  if (passEl)  passEl.value  = '';
+  // Reset to sign-in tab
+  _authMode = 'signin';
+  const siTab = document.getElementById('tab-signin');
+  const suTab = document.getElementById('tab-signup');
+  if (siTab) siTab.classList.add('active');
+  if (suTab) suTab.classList.remove('active');
+  const nameRow = document.getElementById('auth-signup-name');
+  if (nameRow) nameRow.style.display = 'none';
+}
 function hideAuthScreen()  {
   const el=document.getElementById('auth-screen'); if(el) el.style.display='none';
   // load user-specific localStorage data
@@ -423,6 +453,9 @@ input[type="file"]{display:none}
     <div class="sync-dot" id="sync-dot" title="sync status"></div>
   </div>
   <div style="display:flex;align-items:center;gap:10px">
+    <button id="install-app-btn" onclick="installApp()" style="display:none;align-items:center;gap:5px;padding:5px 10px;border-radius:var(--r);border:.5px solid var(--teal);background:var(--tl);color:var(--td);font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font)">
+      <i class="ti ti-download" style="font-size:14px"></i> install app
+    </button>
     <div class="user-badge" id="user-badge" style="display:none">
       <div class="user-avatar" id="user-avatar"></div>
       <span class="user-name" id="user-name-badge"></span>
@@ -1687,20 +1720,35 @@ function switchAuthTab(mode) {
 async function doAuth() {
   const email = document.getElementById('auth-email').value.trim();
   const pass  = document.getElementById('auth-pass').value;
-  const name  = document.getElementById('auth-name')?.value.trim() || email.split('@')[0];
+  const name  = (document.getElementById('auth-name')?.value||'').trim() || email.split('@')[0];
   const errEl = document.getElementById('auth-error');
+  const btn   = document.getElementById('auth-submit-btn');
   errEl.textContent = '';
-  if (!email || !pass) { errEl.textContent = 'please fill in all fields'; return; }
-  if (pass.length < 6)  { errEl.textContent = 'password must be at least 6 characters'; return; }
-  const btn = document.getElementById('auth-submit-btn');
-  btn.textContent = 'please wait…'; btn.disabled = true;
+  if (!email || !pass) { errEl.textContent = 'Please fill in all fields'; return; }
+  if (pass.length < 6) { errEl.textContent = 'Password must be at least 6 characters'; return; }
+  // Guard: auth functions must be initialised by the module script
+  if (!window._authSignIn || !window._authSignUp) {
+    errEl.textContent = 'App still loading, please wait a moment and try again';
+    return;
+  }
+  const label = _authMode === 'signin' ? 'Sign in' : 'Create account';
+  btn.textContent = 'Please wait…'; btn.disabled = true;
   try {
     if (_authMode === 'signup') await window._authSignUp(email, pass, name);
     else                        await window._authSignIn(email, pass);
+    // success — hideAuthScreen() is called by the auth module
   } catch(e) {
-    errEl.textContent = e.message.replace('Firebase: ','').replace(/\(auth\/.*\)/,'').trim();
-    btn.textContent = _authMode === 'signin' ? 'sign in' : 'create account';
-    btn.disabled = false;
+    const msg = (e.message||'Unknown error')
+      .replace('Firebase: ','')
+      .replace(/\(auth\/[^)]+\)/g,'')
+      .replace('auth/invalid-credential','Invalid email or password')
+      .replace('auth/email-already-in-use','Email already registered')
+      .replace('auth/weak-password','Password too weak (min 6 chars)')
+      .replace('auth/user-not-found','No account with that email')
+      .trim();
+    errEl.textContent = msg || 'Sign in failed — please try again';
+  } finally {
+    btn.textContent = label; btn.disabled = false;
   }
 }
 function doSignOut() {
@@ -2078,6 +2126,7 @@ function searchFood(query){
   }).slice(0,12);
   if(!filtered.length){box.style.display='none';return;}
   box.style.display='block';
+  window._foodResults = filtered.map(normFood);
   box.innerHTML=window._foodResults.map((f,i)=>{
     const icon=f.veg===0?'&#x1F357;':'&#x1F7E2;';
     const custom=f.custom?'<span style="font-size:10px;color:var(--teal)"> custom</span>':'';
@@ -2817,7 +2866,8 @@ function exportWeeklyHTML() {
       <td>${tot.p.toFixed(1)}g</td><td>${tot.c.toFixed(1)}g</td><td>${tot.f.toFixed(1)}g</td>
     </tr>`;
   });
-  html += `</table><p style="font-size:12px;color:#9e9e98;margin-top:32px">Generated by Routine Tracker on ${new Date().toLocaleString()}</p></body></html>`;
+  html += `</table><p style="font-size:12px;color:#9e9e98;margin-top:32px">Generated by Routine Tracker on ${new Date().toLocaleString()}</p>
+</body></html>`;
 
   const blob = new Blob([html], { type: 'text/html' });
   const url  = URL.createObjectURL(blob);
@@ -2924,5 +2974,35 @@ setTimeout(() => {
 if('Notification' in window&&Notification.permission==='default') Notification.requestPermission();
 setInterval(checkReminders,60000);
 </script>
+
+<script>
+// ── Service Worker (PWA offline support) ──────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+
+// ── Install prompt (Android Chrome "Add to Home Screen") ──────────
+let _installPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  _installPrompt = e;
+  const btn = document.getElementById('install-app-btn');
+  if (btn) btn.style.display = 'flex';
+});
+window.addEventListener('appinstalled', () => {
+  const btn = document.getElementById('install-app-btn');
+  if (btn) btn.style.display = 'none';
+  _installPrompt = null;
+});
+function installApp() {
+  if (_installPrompt) {
+    _installPrompt.prompt();
+    _installPrompt.userChoice.then(() => { _installPrompt = null; });
+  }
+}
+</script>
+
 </body>
 </html>
