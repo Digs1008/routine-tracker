@@ -8,21 +8,12 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Routine">
 <title>Routine Tracker</title>
-<link rel="manifest" href="manifest.json">
-<meta name="mobile-web-app-capable" content="yes">
-<link rel="apple-touch-icon" sizes="192x192" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%231D9E75'/><text y='.9em' font-size='70' x='15'>📋</text></svg>">
-
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script type="module">
-import { initializeApp }          from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getFirestore, doc, setDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-         signOut, onAuthStateChanged, updateProfile }
-                                   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-
-// ─── STEP 1: paste your Firebase config here ────────────────────────
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyBcJgURkeBthHabtHjq130U9SEeIpR4IU8",
   authDomain: "dig-routine-tracker.firebaseapp.com",
@@ -31,152 +22,25 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "194398144251",
   appId: "1:194398144251:web:c1a09fdab47d2b6604925e",
 };
-// ────────────────────────────────────────────────────────────────────
-
 const FIREBASE_READY = !FIREBASE_CONFIG.apiKey.includes('PASTE');
 window.FIREBASE_READY = FIREBASE_READY;
-
-if (FIREBASE_READY) {
-  const app  = initializeApp(FIREBASE_CONFIG);
-  const db   = getFirestore(app);
-  const auth = getAuth(app);
-  let unsub  = null;
-
-  // ── Auth state listener ──────────────────────────────────────────
-  onAuthStateChanged(auth, user => {
-    if (user) {
-      window._currentUser = { uid: user.uid, email: user.email, name: user.displayName || user.email.split('@')[0] };
-      // subscribe to THIS user's document only
-      if (unsub) unsub();
-      const ref = doc(db, 'users', user.uid, 'data', 'main');
-      unsub = onSnapshot(ref, snap => {
-        if (snap.exists()) {
-          const r = snap.data();
-          state.items       = r.items       || state.items;
-          state.completions = r.completions || state.completions;
-          state.workLogs    = r.workLogs    || state.workLogs;
-          state.mealLogs    = r.mealLogs    || state.mealLogs;
-          state.bodyMetrics = r.bodyMetrics || state.bodyMetrics;
-          state.waterLog    = r.waterLog    || state.waterLog;
-          renderCurrent();
-        }
-      });
-      hideAuthScreen();
-    } else {
-      window._currentUser = null;
-      if (unsub) { unsub(); unsub = null; }
-      showAuthScreen();
+if(FIREBASE_READY){
+  const app=initializeApp(FIREBASE_CONFIG), db=getFirestore(app);
+  const ref=doc(db,'routine','shared');
+  onSnapshot(ref,snap=>{
+    if(snap.exists()){
+      const r=snap.data();
+      state.items=r.items||state.items;
+      state.completions=r.completions||state.completions;
+      state.workLogs=r.workLogs||state.workLogs;
+      state.mealLogs=r.mealLogs||state.mealLogs;
+      renderCurrent();
     }
   });
-
-  window._saveToFirebase = async () => {
-    const user = auth.currentUser;
-    if (!user) return;
-    try {
-      const ref = doc(db, 'users', user.uid, 'data', 'main');
-      await setDoc(ref, {
-        items: state.items, completions: state.completions,
-        workLogs: state.workLogs, mealLogs: state.mealLogs,
-        bodyMetrics: state.bodyMetrics, waterLog: state.waterLog,
-        updatedAt: Date.now()
-      });
-    } catch(e) { console.warn('Firebase save failed', e); }
+  window._saveToFirebase=async()=>{
+    try{ await setDoc(ref,{items:state.items,completions:state.completions,workLogs:state.workLogs,mealLogs:state.mealLogs,updatedAt:Date.now()}); }catch(e){}
   };
-
-  window._authSignUp = async (email, pass, name) => {
-    const cred = await createUserWithEmailAndPassword(auth, email, pass);
-    await updateProfile(cred.user, { displayName: name });
-  };
-  window._authSignIn = (email, pass) => signInWithEmailAndPassword(auth, email, pass);
-  window._authSignOut = () => {
-    window._currentUser = null;
-    localStorage.removeItem('rt_activeUser');
-    state.items=[]; state.completions={}; state.workLogs={};
-    state.mealLogs={}; state.bodyMetrics=[]; state.waterLog={};
-    showAuthScreen();
-  };
-
-} else {
-  // Offline mode – use local profile picker
-  window._saveToFirebase = () => {};
-  window._authSignUp     = async (email, pass, name) => {
-    const profiles = JSON.parse(localStorage.getItem('rt_profiles') || '[]');
-    if (profiles.find(p => p.email === email)) throw new Error('Email already registered');
-    const uid = 'local_' + Date.now();
-    profiles.push({ uid, email, name, pass });
-    localStorage.setItem('rt_profiles', JSON.stringify(profiles));
-    window._currentUser = { uid, email, name };
-    localStorage.setItem('rt_activeUser', JSON.stringify(window._currentUser));
-    hideAuthScreen();
-  };
-  window._authSignIn = async (email, pass) => {
-    const profiles = JSON.parse(localStorage.getItem('rt_profiles') || '[]');
-    const p = profiles.find(p => p.email === email && p.pass === pass);
-    if (!p) throw new Error('Invalid email or password');
-    window._currentUser = { uid: p.uid, email: p.email, name: p.name };
-    localStorage.setItem('rt_activeUser', JSON.stringify(window._currentUser));
-    hideAuthScreen();
-  };
-  window._authSignOut = () => {
-    window._currentUser = null;
-    localStorage.removeItem('rt_activeUser');
-    // reset state so next user starts fresh
-    state.items=[]; state.completions={}; state.workLogs={};
-    state.mealLogs={}; state.bodyMetrics=[]; state.waterLog={};
-    showAuthScreen();
-  };
-  // Auto-login if a session exists
-  setTimeout(() => {
-    const active = localStorage.getItem('rt_activeUser');
-    if (active) { window._currentUser = JSON.parse(active); hideAuthScreen(); }
-    else showAuthScreen();
-  }, 100);
-}
-
-function showAuthScreen() {
-  const el = document.getElementById('auth-screen');
-  if (el) el.style.display = 'flex';
-  // Reset form state so it works after sign-out
-  const btn = document.getElementById('auth-submit-btn');
-  if (btn) { btn.disabled = false; btn.textContent = 'Sign in'; }
-  const err = document.getElementById('auth-error');
-  if (err) err.textContent = '';
-  const emailEl = document.getElementById('auth-email');
-  const passEl  = document.getElementById('auth-pass');
-  if (emailEl) emailEl.value = '';
-  if (passEl)  passEl.value  = '';
-  // Reset to sign-in tab
-  _authMode = 'signin';
-  const siTab = document.getElementById('tab-signin');
-  const suTab = document.getElementById('tab-signup');
-  if (siTab) siTab.classList.add('active');
-  if (suTab) suTab.classList.remove('active');
-  const nameRow = document.getElementById('auth-signup-name');
-  if (nameRow) nameRow.style.display = 'none';
-}
-function hideAuthScreen()  {
-  const el=document.getElementById('auth-screen'); if(el) el.style.display='none';
-  // load user-specific localStorage data
-  const uid = window._currentUser?.uid;
-  if (uid) {
-    try {
-      const s = localStorage.getItem('rtV3_'+uid);
-      if (s) {
-        const p = JSON.parse(s);
-        state.items       = p.items       || [];
-        state.completions = p.completions || {};
-        state.workLogs    = p.workLogs    || {};
-        state.mealLogs    = p.mealLogs    || {};
-        state.bodyMetrics = p.bodyMetrics || [];
-        state.waterLog    = p.waterLog    || {};
-      }
-    } catch(e) {}
-  }
-  renderCurrentOrBoot();
-  updateUserBadge();
-}
-window.showAuthScreen = showAuthScreen;
-window.hideAuthScreen = hideAuthScreen;
+} else { window._saveToFirebase=()=>{}; }
 </script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -199,18 +63,6 @@ window.hideAuthScreen = hideAuthScreen;
   --tl:#0a2a1e;--td:#5DCAA5;--al:#2a1e04;--ad:#FAC775;
   --rl2:#2a0a0a;--pl:#1a1840;--bl:#0a1a30;--cl:#2a1008;--gl:#0a1a04;
 }}
-[data-theme="dark"]{
-  --bg:#1c1c1a;--bg2:#252523;--bg3:#2e2e2b;--txt:#f0f0ec;--txt2:#a0a09a;--txt3:#6e6e68;
-  --bdr:rgba(255,255,255,.1);--bdrm:rgba(255,255,255,.18);
-  --tl:#0a2a1e;--td:#5DCAA5;--al:#2a1e04;--ad:#FAC775;
-  --rl2:#2a0a0a;--pl:#1a1840;--bl:#0a1a30;--cl:#2a1008;--gl:#0a1a04;
-}
-[data-theme="light"]{
-  --bg:#ffffff;--bg2:#f5f5f2;--bg3:#efefeb;--txt:#1a1a18;--txt2:#6b6b66;--txt3:#9e9e98;
-  --bdr:rgba(0,0,0,.12);--bdrm:rgba(0,0,0,.2);
-  --tl:#E1F5EE;--td:#085041;--al:#FAEEDA;--ad:#633806;
-  --rl2:#FCEBEB;--pl:#EEEDFE;--bl:#E6F1FB;--cl:#FAECE7;--gl:#EAF3DE;
-}
 html,body{height:100%;font-family:var(--font);background:var(--bg3);color:var(--txt)}
 body{display:flex;flex-direction:column}
 
@@ -275,6 +127,8 @@ body{display:flex;flex-direction:column}
 /* ── Routine items ── */
 .routine-list{display:flex;flex-direction:column;gap:6px}
 .ri{background:var(--bg);border:.5px solid var(--bdr);border-radius:var(--r);padding:11px 12px;display:flex;align-items:center;gap:10px;transition:all .15s}
+.ri[draggable="true"]:hover{border-color:var(--teal)}
+.ri[draggable="true"]:active{cursor:grabbing}
 .ri:hover{border-color:var(--bdrm)}
 .ri.done{opacity:.5}.ri.done .iname{text-decoration:line-through}
 .ri.fskip{border-left:3px solid var(--amb)}.ri.fover{border-left:3px solid var(--red)}
@@ -365,30 +219,7 @@ input[type="file"]{display:none}
 .grow{display:grid;grid-template-columns:90px 1fr;gap:8px;font-size:13px;padding:5px 0;border-bottom:.5px solid var(--bdr)}
 .grow:last-child{border:none}.gcol{font-weight:600;color:var(--teal)}.gdesc{color:var(--txt2)}
 
-/* ── Auth Screen ── */
-#auth-screen{position:fixed;inset:0;background:var(--bg3);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px}
-.auth-box{background:var(--bg);border:.5px solid var(--bdr);border-radius:var(--rl);padding:28px 24px;width:100%;max-width:360px}
-.auth-logo{text-align:center;margin-bottom:20px}
-.auth-logo i{font-size:36px;color:var(--teal)}
-.auth-logo h1{font-size:20px;font-weight:700;margin-top:6px}
-.auth-logo p{font-size:13px;color:var(--txt2);margin-top:3px}
-.auth-tabs{display:flex;border:.5px solid var(--bdr);border-radius:var(--r);overflow:hidden;margin-bottom:18px}
-.auth-tab{flex:1;padding:8px;text-align:center;font-size:13px;font-weight:500;cursor:pointer;border:none;background:transparent;color:var(--txt2);transition:all .15s}
-.auth-tab.active{background:var(--teal);color:#fff}
-.auth-field{margin-bottom:12px}
-.auth-field label{font-size:12px;color:var(--txt2);display:block;margin-bottom:4px}
-.auth-field input{width:100%;padding:9px 12px;border-radius:var(--r);border:.5px solid var(--bdrm);background:var(--bg2);font-size:13px;color:var(--txt);font-family:var(--font)}
-.auth-field input:focus{outline:none;border-color:var(--teal)}
-.auth-submit{width:100%;padding:10px;border-radius:var(--r);border:none;background:var(--teal);color:#fff;font-size:14px;font-weight:600;cursor:pointer;margin-top:4px;font-family:var(--font);transition:all .15s}
-.auth-submit:hover{opacity:.88}
-.auth-error{font-size:12px;color:var(--red);margin-top:8px;text-align:center;min-height:18px}
-.auth-offline-note{font-size:11px;color:var(--txt3);text-align:center;margin-top:12px;line-height:1.5}
-/* ── User badge ── */
-.user-badge{display:flex;align-items:center;gap:8px}
-.user-avatar{width:28px;height:28px;border-radius:50%;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;cursor:pointer}
-.user-name{font-size:12px;color:var(--txt2);cursor:pointer}
-.signout-btn{font-size:11px;padding:3px 9px;border-radius:20px;border:.5px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;font-family:var(--font)}
-.signout-btn:hover{background:var(--rl2);color:var(--red)}
+/* ── Meal Logger ── */
 .meal-type-tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
 .meal-tab{padding:5px 14px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:.5px solid var(--bdr);background:var(--bg);color:var(--txt2);transition:all .15s}
 .meal-tab.active{background:var(--amb);color:#fff;border-color:var(--amb)}
@@ -456,46 +287,51 @@ input[type="file"]{display:none}
     <button id="install-app-btn" onclick="installApp()" style="display:none;align-items:center;gap:5px;padding:5px 10px;border-radius:var(--r);border:.5px solid var(--teal);background:var(--tl);color:var(--td);font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font)">
       <i class="ti ti-download" style="font-size:14px"></i> install app
     </button>
-    <div class="user-badge" id="user-badge" style="display:none">
-      <div class="user-avatar" id="user-avatar"></div>
-      <span class="user-name" id="user-name-badge"></span>
-      <button class="signout-btn" onclick="doSignOut()"><i class="ti ti-logout" style="font-size:11px"></i> sign out</button>
+    <div class="user-badge" id="user-badge" style="display:none;align-items:center;gap:8px">
+      <div class="user-avatar" id="user-avatar" title="signed in" style="width:28px;height:28px;border-radius:50%;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700"></div>
+      <span class="user-name" id="user-name-badge" style="font-size:12px;color:var(--txt2)"></span>
+      <button class="signout-btn" onclick="doSignOut()" style="font-size:11px;padding:3px 9px;border-radius:20px;border:.5px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;font-family:var(--font)"><i class="ti ti-logout" style="font-size:11px"></i> sign out</button>
     </div>
     <div class="desktop-tabs" id="desktop-tabs">
       <button class="nav-tab active" onclick="showView('today')"><i class="ti ti-calendar-check"></i> today</button>
       <button class="nav-tab" onclick="showView('meals')"><i class="ti ti-salad"></i> meals</button>
-      <button class="nav-tab" onclick="showView('metrics')"><i class="ti ti-activity"></i> body</button>
-      <button class="nav-tab" onclick="showView('work')"><i class="ti ti-briefcase"></i> work</button>
+      <button class="nav-tab" onclick="showView('work')"><i class="ti ti-briefcase"></i> work log</button>
       <button class="nav-tab" onclick="showView('summary')"><i class="ti ti-file-text"></i> summary</button>
       <button class="nav-tab" onclick="showView('coach')"><i class="ti ti-brain"></i> coach</button>
       <button class="nav-tab" onclick="showView('reports')"><i class="ti ti-chart-bar"></i> reports</button>
       <button class="nav-tab" onclick="showView('schedule')"><i class="ti ti-list"></i> schedule</button>
-      <button class="nav-tab" onclick="showView('settings')"><i class="ti ti-settings"></i> settings</button>
       <button class="nav-tab" onclick="showView('import')"><i class="ti ti-upload"></i> import</button>
     </div>
   </div>
 </div>
 
 <!-- AUTH SCREEN OVERLAY -->
-<div id="auth-screen" style="display:none">
-  <div class="auth-box">
-    <div class="auth-logo">
-      <i class="ti ti-layout-dashboard"></i>
-      <h1>routine tracker</h1>
-      <p>your personal daily planner</p>
+<div id="auth-screen" style="display:none;position:fixed;inset:0;background:var(--bg3);align-items:center;justify-content:center;z-index:9999;padding:20px">
+  <div style="background:var(--bg);border:.5px solid var(--bdr);border-radius:var(--rl);padding:28px 24px;width:100%;max-width:360px">
+    <div style="text-align:center;margin-bottom:20px">
+      <i class="ti ti-layout-dashboard" style="font-size:36px;color:var(--teal)"></i>
+      <h1 style="font-size:20px;font-weight:700;margin-top:6px">routine tracker</h1>
+      <p style="font-size:13px;color:var(--txt2);margin-top:3px">your personal daily planner</p>
     </div>
-    <div class="auth-tabs">
-      <button class="auth-tab active" id="tab-signin" onclick="switchAuthTab('signin')">sign in</button>
-      <button class="auth-tab" id="tab-signup" onclick="switchAuthTab('signup')">create account</button>
+    <div style="display:flex;border:.5px solid var(--bdr);border-radius:var(--r);overflow:hidden;margin-bottom:18px">
+      <button class="auth-tab active" id="tab-signin" onclick="switchAuthTab('signin')" style="flex:1;padding:8px;text-align:center;font-size:13px;font-weight:500;cursor:pointer;border:none;background:var(--teal);color:#fff">sign in</button>
+      <button class="auth-tab" id="tab-signup" onclick="switchAuthTab('signup')" style="flex:1;padding:8px;text-align:center;font-size:13px;font-weight:500;cursor:pointer;border:none;background:transparent;color:var(--txt2)">create account</button>
     </div>
-    <div id="auth-signup-name" style="display:none">
-      <div class="auth-field"><label>your name</label><input type="text" id="auth-name" placeholder="e.g. Rahul"></div>
+    <div id="auth-signup-name" style="display:none;margin-bottom:12px">
+      <label style="font-size:12px;color:var(--txt2);display:block;margin-bottom:4px">your name</label>
+      <input type="text" id="auth-name" placeholder="e.g. Rahul" style="width:100%;padding:9px 12px;border-radius:var(--r);border:.5px solid var(--bdrm);background:var(--bg2);font-size:13px;color:var(--txt);font-family:var(--font)">
     </div>
-    <div class="auth-field"><label>email</label><input type="email" id="auth-email" placeholder="you@example.com"></div>
-    <div class="auth-field"><label>password</label><input type="password" id="auth-pass" placeholder="min 6 characters"></div>
-    <button class="auth-submit" id="auth-submit-btn" onclick="doAuth()">sign in</button>
-    <div class="auth-error" id="auth-error"></div>
-    <div class="auth-offline-note" id="auth-offline-note"></div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:12px;color:var(--txt2);display:block;margin-bottom:4px">email</label>
+      <input type="email" id="auth-email" placeholder="you@example.com" style="width:100%;padding:9px 12px;border-radius:var(--r);border:.5px solid var(--bdrm);background:var(--bg2);font-size:13px;color:var(--txt);font-family:var(--font)">
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:12px;color:var(--txt2);display:block;margin-bottom:4px">password</label>
+      <input type="password" id="auth-pass" placeholder="min 6 characters" style="width:100%;padding:9px 12px;border-radius:var(--r);border:.5px solid var(--bdrm);background:var(--bg2);font-size:13px;color:var(--txt);font-family:var(--font)" onkeydown="if(event.key==='Enter')doAuth()">
+    </div>
+    <button id="auth-submit-btn" onclick="doAuth()" style="width:100%;padding:10px;border-radius:var(--r);border:none;background:var(--teal);color:#fff;font-size:14px;font-weight:600;cursor:pointer;margin-top:4px;font-family:var(--font)">sign in</button>
+    <div id="auth-error" style="font-size:12px;color:var(--red);margin-top:8px;text-align:center;min-height:18px"></div>
+    <div id="auth-offline-note" style="font-size:11px;color:var(--txt3);text-align:center;margin-top:12px;line-height:1.5"></div>
   </div>
 </div>
 
@@ -544,11 +380,11 @@ input[type="file"]{display:none}
       <textarea id="work-note" placeholder="What did you work on? Any blockers, decisions, wins..."></textarea>
     </div></div>
     <div class="factions">
-      <button class="btn p" id="work-save-btn" onclick="saveWorkEntry()"><i class="ti ti-device-floppy"></i> save entry</button>
+      <button class="btn p" onclick="saveWorkEntry()"><i class="ti ti-device-floppy"></i> save entry</button>
     </div>
   </div>
 
-  <div class="sec-hdr"><div class="sec-title">today's log</div></div>
+  <div class="sec-hdr"><div class="sec-title">work log</div><div style="display:flex;gap:6px;align-items:center"><input type="text" id="work-search" placeholder="search tasks…" oninput="renderWork()" style="padding:5px 10px;border-radius:var(--r);border:.5px solid var(--bdr);background:var(--bg);font-size:12px;color:var(--txt);font-family:var(--font);width:150px"></div></div>
   <div id="work-entries"></div>
   <div id="empty-work" class="empty" style="display:none"><i class="ti ti-clipboard"></i><p>no work entries yet for this day.</p></div>
 </div>
@@ -587,12 +423,6 @@ input[type="file"]{display:none}
   </div>
 
   <div class="card">
-    <h4><i class="ti ti-arrows-exchange" style="vertical-align:-2px;margin-right:4px;color:var(--teal)"></i>habit correlations</h4>
-    <p style="font-size:13px;color:var(--txt2);margin-bottom:10px;line-height:1.6">Which habits unlock other habits? Based on your last 30 days.</p>
-    <div id="habit-correlations"></div>
-  </div>
-
-  <div class="card">
     <h4><i class="ti ti-target" style="vertical-align:-2px;margin-right:4px;color:var(--teal)"></i>goal progress</h4>
     <div id="goal-progress"></div>
   </div>
@@ -618,8 +448,6 @@ input[type="file"]{display:none}
   </div>
   <div class="card"><h4>task completion rates</h4><div id="task-bars"></div></div>
   <div class="card"><h4>most skipped</h4><div id="skipped-tasks"></div></div>
-  <div class="card"><h4>nutrition trends</h4><div style="position:relative;width:100%;height:200px"><canvas id="chart-nut-trends"></canvas></div></div>
-  <div class="card"><h4>month vs last month</h4><div id="mom-comparison"></div></div>
 </div>
 
 <!-- SCHEDULE -->
@@ -713,9 +541,6 @@ input[type="file"]{display:none}
     <div class="nutrition-chart-wrap"><canvas id="chart-nutrition"></canvas></div>
   </div>
 
-  <!-- Water tracker -->
-  <div class="card" style="margin-bottom:12px" id="water-widget"></div>
-
   <!-- Add food entry -->
   <div class="aform">
     <h3><i class="ti ti-salad" style="color:var(--amb)"></i> log food</h3>
@@ -726,11 +551,6 @@ input[type="file"]{display:none}
       <button class="meal-tab" onclick="setMealType('snack',this)">🍎 Snack</button>
     </div>
 
-    <div style="display:flex;gap:6px;margin-bottom:10px">
-      <button class="food-filter-btn cat-btn active" onclick="setFoodFilter('all',this)">🍽 all</button>
-      <button class="food-filter-btn cat-btn" onclick="setFoodFilter('veg',this)">🟢 veg only</button>
-      <button class="food-filter-btn cat-btn" onclick="setFoodFilter('nonveg',this)">🍗 non-veg</button>
-    </div>
     <div class="food-search-wrap">
       <input type="text" id="food-search" placeholder="Search: dal, roti, paneer, rice…" oninput="searchFood(this.value)" onkeydown="if(event.key==='Enter')addCustomFood()">
       <button class="btn p" onclick="addCustomFood()" title="add custom item"><i class="ti ti-plus"></i></button>
@@ -779,131 +599,20 @@ input[type="file"]{display:none}
   <div id="empty-meals" class="empty" style="display:none"><i class="ti ti-salad"></i><p>no food logged yet for this day.</p></div>
 </div>
 
-<!-- BODY METRICS -->
-<div id="view-metrics" class="view">
-  <div class="sec-hdr"><div class="sec-title">body metrics</div></div>
-  <div class="metrics-row" id="metrics-cards"></div>
-
-  <div class="aform" style="margin-bottom:14px">
-    <h3><i class="ti ti-ruler-measure" style="color:var(--cor)"></i> log measurement</h3>
-    <div class="fr t">
-      <div class="fg"><label>body fat %</label><input type="number" id="inp-bf" placeholder="e.g. 24.5" step="0.1" min="1" max="60"></div>
-      <div class="fg"><label>weight</label><input type="number" id="inp-wt" placeholder="e.g. 78.5" step="0.1" min="30"></div>
-      <div class="fg"><label>date</label><input type="date" id="inp-metric-date"></div>
-    </div>
-    <div class="fr f"><div class="fg"><label>note (optional)</label><input type="text" id="inp-metric-note" placeholder="e.g. post-workout, morning weight"></div></div>
-    <div class="factions"><button class="btn p" onclick="logMetric()"><i class="ti ti-plus"></i> log measurement</button></div>
-  </div>
-
-  <div class="card">
-    <h4>progress toward goal</h4>
-    <div style="position:relative;width:100%;height:220px"><canvas id="chart-metrics"></canvas></div>
-  </div>
-
-  <div class="card">
-    <h4>history</h4>
-    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
-      <thead><tr style="border-bottom:.5px solid var(--bdr)">
-        <th style="text-align:left;padding:6px 8px;color:var(--txt2);font-weight:600">date</th>
-        <th style="text-align:left;padding:6px 8px;color:var(--txt2);font-weight:600">body fat</th>
-        <th style="text-align:left;padding:6px 8px;color:var(--txt2);font-weight:600">weight</th>
-        <th style="text-align:left;padding:6px 8px;color:var(--txt2);font-weight:600">note</th>
-        <th></th>
-      </tr></thead>
-      <tbody id="metrics-history"></tbody>
-    </table></div>
-  </div>
-</div>
-
-<!-- SETTINGS -->
-<div id="view-settings" class="view">
-  <div class="sec-hdr"><div class="sec-title">settings & profile</div></div>
-
-  <div class="aform" style="margin-bottom:14px">
-    <h3><i class="ti ti-user" style="color:var(--teal)"></i> profile</h3>
-    <div class="fr f"><div class="fg"><label>display name</label><input type="text" id="set-name" placeholder="My Routine"></div></div>
-    <div class="fr">
-      <div class="fg"><label>weight unit</label>
-        <select id="set-wunit"><option value="kg">kg</option><option value="lbs">lbs</option></select>
-      </div>
-      <div class="fg"><label>body fat goal (%)</label><input type="number" id="set-bfgoal" value="20" min="5" max="40" step="0.5"></div>
-    </div>
-    <div class="fr f"><div class="fg"><label>theme</label>
-      <select id="set-theme">
-        <option value="system">system default</option>
-        <option value="light">always light</option>
-        <option value="dark">always dark</option>
-      </select>
-    </div></div>
-  </div>
-
-  <div class="aform" style="margin-bottom:14px">
-    <h3><i class="ti ti-target" style="color:var(--amb)"></i> daily nutrition targets</h3>
-    <div class="fr t">
-      <div class="fg"><label>calories (kcal)</label><input type="number" id="set-cal" value="2000" min="800"></div>
-      <div class="fg"><label>protein (g)</label><input type="number" id="set-protein" value="120" min="20"></div>
-      <div class="fg"><label>water (glasses)</label><input type="number" id="set-water" value="8" min="1" max="20"></div>
-    </div>
-    <div class="fr">
-      <div class="fg"><label>carbs (g)</label><input type="number" id="set-carbs" value="250" min="20"></div>
-      <div class="fg"><label>fat (g)</label><input type="number" id="set-fat" value="65" min="10"></div>
-    </div>
-    <div class="factions"><button class="btn p" onclick="saveSettingsForm()"><i class="ti ti-device-floppy"></i> save settings</button></div>
-  </div>
-
-  <div class="aform" style="margin-bottom:14px">
-    <h3><i class="ti ti-salad" style="color:var(--grn, #3B6D11)"></i> custom foods</h3>
-    <div class="fr t">
-      <div class="fg" style="grid-column:1/-1"><label>food name</label><input type="text" id="cf-name" placeholder="e.g. My Dal Recipe"></div>
-    </div>
-    <div class="fr t">
-      <div class="fg"><label>calories (kcal)</label><input type="number" id="cf-cal" placeholder="180" min="0"></div>
-      <div class="fg"><label>protein (g)</label><input type="number" id="cf-protein" placeholder="8" min="0" step="0.1"></div>
-      <div class="fg"><label>unit</label>
-        <select id="cf-unit"><option value="serving">serving</option><option value="bowl">bowl</option><option value="piece">piece</option><option value="cup">cup</option><option value="g">per 100g</option></select>
-      </div>
-    </div>
-    <div class="fr">
-      <div class="fg"><label>carbs (g)</label><input type="number" id="cf-carbs" placeholder="25" min="0" step="0.1"></div>
-      <div class="fg"><label>fat (g)</label><input type="number" id="cf-fat" placeholder="4" min="0" step="0.1"></div>
-    </div>
-    <div class="factions"><button class="btn p" onclick="saveCustomFood()"><i class="ti ti-plus"></i> add food</button></div>
-    <div id="custom-foods-list" style="margin-top:12px"></div>
-  </div>
-
-  <div class="aform" style="margin-bottom:14px">
-    <h3><i class="ti ti-template" style="color:var(--pur)"></i> meal templates</h3>
-    <p style="font-size:13px;color:var(--txt2);margin-bottom:10px">Save today's logged meals as a reusable template.</p>
-    <div class="fr f"><div class="fg"><label>template name</label><input type="text" id="tmpl-name" placeholder="e.g. Typical Weekday"></div></div>
-    <div class="factions"><button class="btn p" onclick="saveMealTemplate()"><i class="ti ti-bookmark"></i> save today as template</button></div>
-    <div id="templates-list" style="margin-top:12px"></div>
-  </div>
-
-  <div class="card">
-    <h4><i class="ti ti-download" style="vertical-align:-2px;margin-right:4px;color:var(--teal)"></i>export data</h4>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
-      <button class="btn p" onclick="exportCSV()"><i class="ti ti-table-export"></i> export CSV (90 days)</button>
-      <button class="btn" onclick="exportWeeklyHTML()"><i class="ti ti-file-type-html"></i> export weekly report</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <h4><i class="ti ti-alert-triangle" style="vertical-align:-2px;margin-right:4px;color:var(--red)"></i>danger zone</h4>
-    <button class="btn d sm" onclick="clearAll()" style="margin-top:4px"><i class="ti ti-trash"></i> clear all data</button>
-  </div>
-</div>
-
-<!-- Bottom nav -->
+<!-- Mobile bottom nav -->
 <nav class="bottom-nav">
   <button class="bnav-btn active" onclick="showView('today')"    id="bn-today">   <i class="ti ti-calendar-check"></i>today</button>
   <button class="bnav-btn"        onclick="showView('meals')"    id="bn-meals">   <i class="ti ti-salad"></i>meals</button>
-  <button class="bnav-btn"        onclick="showView('metrics')"  id="bn-metrics"> <i class="ti ti-activity"></i>body</button>
   <button class="bnav-btn"        onclick="showView('work')"     id="bn-work">    <i class="ti ti-briefcase"></i>work</button>
+  <button class="bnav-btn"        onclick="showView('summary')"  id="bn-summary"> <i class="ti ti-file-text"></i>summary</button>
   <button class="bnav-btn"        onclick="showView('coach')"    id="bn-coach">   <i class="ti ti-brain"></i>coach</button>
-  <button class="bnav-btn"        onclick="showView('settings')" id="bn-settings"><i class="ti ti-settings"></i>settings</button>
+  <button class="bnav-btn"        onclick="showView('reports')"  id="bn-reports"> <i class="ti ti-chart-bar"></i>reports</button>
 </nav>
 
 <script>
+
+
+
 // ═══════════════════════════════════════════════════════════════════
 // CONSTANTS
 // ═══════════════════════════════════════════════════════════════════
@@ -1153,26 +862,35 @@ function deleteWorkEntry(d,id){
 function renderWork(){
   const d=state.workDate;
   document.getElementById('work-label').textContent=fmtDate(d)+(d===todayStr()?' — today':'');
-  const entries=state.workLogs[d]||[];
+  const query=(document.getElementById('work-search')?.value||'').toLowerCase().trim();
+  let entriesToShow=[];
+  if(query){
+    // Search across all dates
+    Object.entries(state.workLogs).sort((a,b)=>b[0].localeCompare(a[0])).forEach(([date,entries])=>{
+      entries.forEach(e=>{
+        if(e.tasks.some(t=>t.toLowerCase().includes(query))||(e.note||'').toLowerCase().includes(query)){
+          entriesToShow.push({date,e});
+        }
+      });
+    });
+  }else{
+    (state.workLogs[d]||[]).forEach(e=>entriesToShow.push({date:d,e}));
+  }
   const el=document.getElementById('work-entries');
-  document.getElementById('empty-work').style.display=entries.length?'none':'block';
-  el.innerHTML=entries.map(e=>`
-    <div class="wlog-entry">
-      <div class="wlog-header">
-        <span class="wlog-time"><i class="ti ti-clock" style="font-size:11px"></i> ${e.time||''}</span>
-        <div style="display:flex;gap:6px">
-          <button class="btn sm" onclick="editWorkEntry('${d}','${e.id}')"><i class="ti ti-edit" style="font-size:13px"></i></button>
-          <button class="btn sm del" style="border-color:transparent" onclick="deleteWorkEntry('${d}','${e.id}')"><i class="ti ti-trash" style="font-size:13px;color:var(--txt3)"></i></button>
-        </div>
-      </div>
-      ${e.tasks.length?`<div class="wlog-tasks">${e.tasks.map(t=>`<span class="wlog-task">${esc(t)}</span>`).join('')}</div>`:''}
-      ${e.note?`<div class="wlog-note">${esc(e.note).replace(/\n/g,'<br>')}</div>`:''}
-    </div>`).join('');
+  document.getElementById('empty-work').style.display=entriesToShow.length?'none':'block';
+  el.innerHTML=entriesToShow.map(({date,e})=>{
+    const dateTag=query?'<span style="font-size:11px;color:var(--teal);margin-left:4px">'+fmtShort(date)+'</span>':'';
+    return '<div class="wlog-entry">'
+      +'<div class="wlog-header"><span class="wlog-time"><i class="ti ti-clock" style="font-size:11px"></i> '+(e.time||'')+dateTag+'</span>'
+      +'<div style="display:flex;gap:5px">'
+      +'<button class="btn sm" onclick="editWorkEntry(&quot;'+date+'&quot;,&quot;'+e.id+'&quot;)" style="width:26px;height:26px;padding:0;display:flex;align-items:center;justify-content:center"><i class="ti ti-edit" style="font-size:13px"></i></button>'
+      +'<button class="btn sm del" onclick="deleteWorkEntry(&quot;'+date+'&quot;,&quot;'+e.id+'&quot;)" style="width:26px;height:26px;padding:0;display:flex;align-items:center;justify-content:center;border-color:transparent"><i class="ti ti-trash" style="font-size:13px;color:var(--txt3)"></i></button>'
+      +'</div></div>'
+      +(e.tasks.length?'<div class="wlog-tasks">'+e.tasks.map(t=>'<span class="wlog-task">'+esc(t)+'</span>').join('')+'</div>':'')
+      +(e.note?'<div class="wlog-note">'+esc(e.note).replace(/\n/g,'<br>')+'</div>':'')
+      +'</div>';
+  }).join('');
 }
-
-// ═══════════════════════════════════════════════════════════════════
-// DAY SUMMARY
-// ═══════════════════════════════════════════════════════════════════
 function renderSummary(){
   const d=state.summaryDate;
   document.getElementById('summary-label').textContent=fmtDate(d)+(d===todayStr()?' — today':'');
@@ -1357,102 +1075,69 @@ function getDailyMotivation(adh,streak,done,total){
   return {text:text.trim(),chips};
 }
 
-async function runDeepAnalysis(){
+async function runDeepAnalysis(forceRefresh){
   const el=document.getElementById('deep-analysis-result');
-  el.innerHTML=`<div class="ai-loading"><div class="dot"></div><div class="dot"></div><div class="dot"></div><span style="font-size:13px;color:var(--txt2)">analysing your data…</span></div>`;
+  const cacheKey='aiCoachCache_'+(window._currentUser?.uid||'guest');
+  const noteEl=document.getElementById('ai-cache-note');
 
-  // Build rich context from state
+  // Check cache (valid for 24h) unless force refresh
+  if(!forceRefresh){
+    try{
+      const cached=JSON.parse(localStorage.getItem(cacheKey)||'null');
+      if(cached&&Date.now()-cached.ts<86400000){
+        el.innerHTML='<div style="font-size:13px;line-height:1.8;color:var(--txt)">'+cached.html+'</div>';
+        const hours=Math.round((Date.now()-cached.ts)/3600000);
+        if(noteEl)noteEl.textContent='Cached '+hours+'h ago — click "refresh" to update';
+        return;
+      }
+    }catch(e){}
+  }
+
+  el.innerHTML='<div class="ai-loading"><div class="dot"></div><div class="dot"></div><div class="dot"></div><span style="font-size:13px;color:var(--txt2)">analysing your data…</span></div>';
+  if(noteEl)noteEl.textContent='';
+
   const today=todayStr();
   const last30=Array.from({length:30},(_,i)=>addDays(today,-i));
-  const last7=last30.slice(0,7);
-
-  const overallAdh=Math.round(last30.map(d=>getAdherence(d)).filter(a=>a!==null).reduce((s,a,_,arr)=>s+a/arr.length,0));
-  const weekAdh=Math.round(last7.map(d=>getAdherence(d)).filter(a=>a!==null).reduce((s,a,_,arr)=>s+a/arr.length,0));
-
-  // Per-day-of-week adherence
-  const dowStats={};
-  SHORTDAY.forEach(d=>dowStats[d]={done:0,total:0});
-  last30.forEach(d=>{
-    const dow=SHORTDAY[parseDate(d).getDay()];
-    state.items.filter(i=>dayApplies(i,d)).forEach(i=>{
-      dowStats[dow].total++;
-      if(isCompleted(i.id,d))dowStats[dow].done++;
-    });
-  });
-
-  // Per-task miss rate
-  const taskStats=state.items.map(it=>{
-    let miss=0,tot=0;
-    last30.forEach(d=>{if(dayApplies(it,d)){tot++;if(!isCompleted(it.id,d))miss++;}});
-    return {name:it.name,cat:it.category,miss,tot,pct:tot?Math.round((tot-miss)/tot*100):0};
-  }).sort((a,b)=>a.pct-b.pct);
-
-  const worstTasks=taskStats.filter(t=>t.tot>0).slice(0,3);
-  const bestTasks=taskStats.filter(t=>t.tot>0).slice(-3).reverse();
-
-  // Work log stats
-  const workDays=Object.keys(state.workLogs).filter(d=>state.workLogs[d].length>0);
-  const totalWorkTasks=workDays.flatMap(d=>state.workLogs[d].flatMap(e=>e.tasks)).length;
-
-  // Day of week patterns
+  const adDays=last30.map(d=>getAdherence(d)).filter(a=>a!==null);
+  const overallAdh=adDays.length?Math.round(adDays.reduce((s,a)=>s+a,0)/adDays.length):0;
+  const weekAdh=Math.round(last30.slice(0,7).map(d=>getAdherence(d)).filter(a=>a!==null).reduce((s,a,_,arr)=>s+a/arr.length,0));
+  const taskStats=state.items.map(it=>{let miss=0,tot=0;last30.forEach(d=>{if(dayApplies(it,d)){tot++;if(!isCompleted(it.id,d))miss++;}});return{name:it.name,cat:it.category,miss,tot,pct:tot?Math.round((tot-miss)/tot*100):0};});
+  const dowStats={};SHORTDAY.forEach(d=>dowStats[d]={done:0,total:0});
+  last30.forEach(d=>{const dow=SHORTDAY[parseDate(d).getDay()];state.items.filter(i=>dayApplies(i,d)).forEach(i=>{dowStats[dow].total++;if(isCompleted(i.id,d))dowStats[dow].done++;});});
   const weakDay=Object.entries(dowStats).filter(([,v])=>v.total>0).sort((a,b)=>(a[1].done/a[1].total)-(b[1].done/b[1].total))[0];
-  const strongDay=Object.entries(dowStats).filter(([,v])=>v.total>0).sort((a,b)=>(b[1].done/b[1].total)-(a[1].done/a[1].total))[0];
+  const workDays=Object.keys(state.workLogs).filter(d=>state.workLogs[d].length>0).length;
+  const totalWorkTasks=Object.values(state.workLogs).flatMap(v=>v).flatMap(e=>e.tasks).length;
+  const worst=taskStats.filter(t=>t.tot>0).sort((a,b)=>a.pct-b.pct).slice(0,3);
+  const best=taskStats.filter(t=>t.tot>0).sort((a,b)=>b.pct-a.pct).slice(0,3);
 
-  const prompt=`You are a personal productivity coach and health advisor. Analyse this person's routine data and provide specific, actionable coaching.
-
-DATA SUMMARY (last 30 days):
-- Overall adherence: ${overallAdh}%
-- This week adherence: ${weekAdh}%
-- Current streak: ${calcStreak()} days
-- Total routine items: ${state.items.length}
-- Work tasks logged: ${totalWorkTasks} across ${workDays.length} days
-
-WORST 3 TASKS (most skipped):
-${worstTasks.map(t=>`- ${t.name} (${t.cat}): only ${t.pct}% completion`).join('\n')}
-
-BEST 3 TASKS (most consistent):
-${bestTasks.map(t=>`- ${t.name} (${t.cat}): ${t.pct}% completion`).join('\n')}
-
-DAY-OF-WEEK PATTERNS:
-${Object.entries(dowStats).filter(([,v])=>v.total>0).map(([d,v])=>`- ${d}: ${Math.round(v.done/v.total*100)}%`).join('\n')}
-Weakest day: ${weakDay?weakDay[0]:'unknown'}
-Strongest day: ${strongDay?strongDay[0]:'unknown'}
-
-THEIR GOALS:
-- Body fat target: 20% (via daily gym)
-- Complete AI certification (via daily learning)
-- 10,000 steps on weekends (via walk)
-
-ROUTINE CATEGORIES: ${[...new Set(state.items.map(i=>i.category))].join(', ')}
-
-Please provide:
-1. **Pattern Analysis** — 2-3 specific patterns you notice (be specific, mention actual task names and days)
-2. **Top 3 Actionable Suggestions** — concrete changes they can make this week
-3. **Schedule Optimisation** — 1-2 specific timing or ordering tweaks based on the data
-4. **Goal Progress Nudge** — honest assessment of AI cert and body fat goal trajectory
-5. **This Week's Focus** — one single most important habit to nail this week
-
-Be direct, warm, data-driven. No fluff. Max 350 words.`;
+  const prompt='You are a personal productivity & health coach. Analyse this data and give specific, actionable coaching.\n\n'
+    +'DATA (last 30 days):\n'
+    +'- Overall adherence: '+overallAdh+'% | This week: '+weekAdh+'%\n'
+    +'- Current streak: '+calcStreak()+' days\n'
+    +'- Work: '+totalWorkTasks+' tasks logged across '+workDays+' days\n'
+    +'- Weakest tasks: '+worst.map(t=>t.name+' ('+t.pct+'%)').join(', ')+'\n'
+    +'- Best tasks: '+best.map(t=>t.name+' ('+t.pct+'%)').join(', ')+'\n'
+    +'- Weakest day: '+(weakDay?weakDay[0]+' ('+Math.round(weakDay[1].done/weakDay[1].total*100)+'%)':'unknown')+'\n'
+    +'- Routine categories: '+[...new Set(state.items.map(i=>i.category))].join(', ')+'\n\n'
+    +'Goals: Reach 20% body fat, complete AI certification\n\n'
+    +'Provide: 1) Pattern Analysis (2-3 specific patterns naming actual tasks), 2) Top 3 Actionable suggestions for this week, 3) Schedule Optimisation tip, 4) Goal trajectory assessment, 5) Single most important habit to nail this week.\n\nBe direct and data-driven. Max 300 words.';
 
   try{
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',
-        max_tokens:1000,
-        messages:[{role:'user',content:prompt}]
-      })
-    });
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,messages:[{role:'user',content:prompt}]})});
     const data=await resp.json();
     const txt=data.content?.find(b=>b.type==='text')?.text||'';
     if(!txt)throw new Error('empty');
-    el.innerHTML=`<div style="font-size:13px;line-height:1.8;color:var(--txt);white-space:pre-wrap">${formatAIText(txt)}</div>`;
+    const formatted=txt.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>');
+    el.innerHTML='<div style="font-size:13px;line-height:1.8;color:var(--txt)">'+formatted+'</div>';
+    // Cache result
+    try{localStorage.setItem(cacheKey,JSON.stringify({ts:Date.now(),html:formatted}));}catch(e){}
+    if(noteEl)noteEl.textContent='Just refreshed — valid for 24h';
   }catch(e){
-    el.innerHTML=`<div style="font-size:13px;color:var(--txt2);line-height:1.6">${buildFallbackAnalysis(overallAdh,weekAdh,worstTasks,bestTasks,weakDay,strongDay)}</div>`;
+    const fallback=buildFallbackAnalysis(overallAdh,weekAdh,worst,best,weakDay);
+    el.innerHTML='<div style="font-size:13px;color:var(--txt2);line-height:1.6">'+fallback+'</div>';
+    if(noteEl)noteEl.textContent='Offline fallback — connect to internet for AI analysis';
   }
 }
-
 function formatAIText(txt){
   return txt
     .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
@@ -1618,22 +1303,87 @@ function renderSchedule(){
   const listEl=document.getElementById('schedule-list');
   document.getElementById('empty-schedule').style.display=state.items.length?'none':'block';
   if(!state.items.length){listEl.innerHTML='';return;}
-  const sorted=[...state.items].sort((a,b)=>(a.time||'').localeCompare(b.time||''));
-  listEl.innerHTML=`<div class="routine-list">${sorted.map(it=>`
-    <div class="ri">
-      <div class="ichk" style="cursor:default;border-color:transparent"><i class="ti ti-grip-vertical" style="font-size:14px;color:var(--txt3)"></i></div>
-      <div class="ibody">
-        <div class="iname">${esc(it.name)}</div>
-        <div class="imeta">
-          <span style="display:flex;align-items:center;gap:3px"><i class="ti ti-clock" style="font-size:11px"></i>${it.time||'–'}${it.duration?' · '+it.duration+'m':''}</span>
-          <span class="icat cat-${it.category||'personal'}">${it.category||'personal'}</span>
-          <span style="font-size:11px;color:var(--txt3)">${it.days||'everyday'}</span>
-          ${it.goal?`<span class="gtag">🎯 ${esc(it.goal)}</span>`:''}
-          <span style="font-size:11px;color:var(--txt3)"><i class="ti ti-bell" style="font-size:11px"></i> ${it.remind||5}m</span>
-        </div>
-      </div>
-      <div class="iact"><button class="del" onclick="deleteItem('${it.id}')" title="delete"><i class="ti ti-trash"></i></button></div>
-    </div>`).join('')}</div>`;
+  // Use stored order if present, else fall back to time-sort once
+  const ordered=state.items;
+  listEl.innerHTML='<div style="font-size:11px;color:var(--txt3);margin-bottom:8px;display:flex;align-items:center;gap:4px"><i class="ti ti-arrows-move" style="font-size:13px"></i> drag the handle to reorder</div>'
+    +'<div class="routine-list" id="sortable-list">'+ordered.map((it,idx)=>{
+    return '<div class="ri" id="ri-'+it.id+'" draggable="true" data-idx="'+idx+'" ondragstart="dragStart(event)" ondragover="dragOver(event)" ondrop="dragDrop(event)" ondragend="dragEnd(event)">'
+      +'<div class="ichk" style="cursor:grab;border-color:transparent" title="drag to reorder"><i class="ti ti-grip-vertical" style="font-size:16px;color:var(--txt3)"></i></div>'
+      +'<div class="ibody"><div class="iname">'+esc(it.name)+'</div>'
+      +'<div class="imeta">'
+      +'<span style="display:flex;align-items:center;gap:3px"><i class="ti ti-clock" style="font-size:11px"></i>'+(it.time||'–')+(it.duration?' · '+it.duration+'m':'')+'</span>'
+      +'<span class="icat cat-'+(it.category||'personal')+'">'+(it.category||'personal')+'</span>'
+      +'<span style="font-size:11px;color:var(--txt3)">'+(it.days||'everyday')+'</span>'
+      +(it.goal?'<span class="gtag">🎯 '+esc(it.goal)+'</span>':'')
+      +'<span style="font-size:11px;color:var(--txt3)"><i class="ti ti-bell" style="font-size:11px"></i> '+(it.remind||5)+'m</span>'
+      +'</div></div>'
+      +'<div class="iact">'
+      +'<button onclick="toggleInlineEdit(&quot;'+it.id+'&quot;)" title="edit" style="width:28px;height:28px;border-radius:var(--r);border:.5px solid var(--bdr);background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--txt2)"><i class="ti ti-edit"></i></button>'
+      +'<button class="del" onclick="deleteItem(&quot;'+it.id+'&quot;)" title="delete" style="width:28px;height:28px;border-radius:var(--r);border:.5px solid var(--bdr);background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--txt2)"><i class="ti ti-trash"></i></button>'
+      +'</div></div>'
+      +'<div id="edit-'+it.id+'" style="display:none;background:var(--bg2);border-radius:var(--r);padding:12px;margin:0 0 6px;border:.5px solid var(--bdr)"></div>';
+  }).join('')+'</div>';
+}
+let _dragSrcIdx=null;
+function dragStart(e){
+  _dragSrcIdx=parseInt(e.currentTarget.dataset.idx);
+  e.currentTarget.style.opacity='0.4';
+  e.dataTransfer.effectAllowed='move';
+}
+function dragOver(e){e.preventDefault();return false;}
+function dragDrop(e){
+  e.preventDefault();
+  const targetIdx=parseInt(e.currentTarget.dataset.idx);
+  if(_dragSrcIdx===null||_dragSrcIdx===targetIdx)return;
+  const items=[...state.items];
+  const[moved]=items.splice(_dragSrcIdx,1);
+  items.splice(targetIdx,0,moved);
+  state.items=items;
+  save();renderSchedule();showToast('Order updated ✓');
+}
+function dragEnd(e){e.currentTarget.style.opacity='1';_dragSrcIdx=null;}
+function toggleInlineEdit(id){
+  const el=document.getElementById('edit-'+id); if(!el)return;
+  if(el.style.display!=='none'){el.style.display='none';return;}
+  const it=state.items.find(i=>i.id===id); if(!it)return;
+  const cats=['health','fitness','work','personal','meal','learning'];
+  const dayOpts=['everyday','weekday','weekend','mon,wed,fri','tue,thu'];
+  el.innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
+    +'<div><label style="font-size:11px;color:var(--txt2);display:block;margin-bottom:3px">name</label>'
+    +'<input id="ei-name-'+id+'" value="'+esc(it.name)+'" style="width:100%;padding:6px 8px;border-radius:var(--r);border:.5px solid var(--bdrm);background:var(--bg);font-size:13px;color:var(--txt);font-family:var(--font)"></div>'
+    +'<div><label style="font-size:11px;color:var(--txt2);display:block;margin-bottom:3px">time</label>'
+    +'<input type="time" id="ei-time-'+id+'" value="'+(it.time||'07:00')+'" style="width:100%;padding:6px 8px;border-radius:var(--r);border:.5px solid var(--bdrm);background:var(--bg);font-size:13px;color:var(--txt);font-family:var(--font)"></div>'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">'
+    +'<div><label style="font-size:11px;color:var(--txt2);display:block;margin-bottom:3px">duration (min)</label>'
+    +'<input type="number" id="ei-dur-'+id+'" value="'+(it.duration||20)+'" style="width:100%;padding:6px 8px;border-radius:var(--r);border:.5px solid var(--bdrm);background:var(--bg);font-size:13px;color:var(--txt);font-family:var(--font)"></div>'
+    +'<div><label style="font-size:11px;color:var(--txt2);display:block;margin-bottom:3px">category</label>'
+    +'<select id="ei-cat-'+id+'" style="width:100%;padding:6px 8px;border-radius:var(--r);border:.5px solid var(--bdrm);background:var(--bg);font-size:13px;color:var(--txt);font-family:var(--font)">'+cats.map(c=>'<option '+(it.category===c?'selected':'')+'>'+c+'</option>').join('')+'</select></div>'
+    +'<div><label style="font-size:11px;color:var(--txt2);display:block;margin-bottom:3px">days</label>'
+    +'<select id="ei-days-'+id+'" style="width:100%;padding:6px 8px;border-radius:var(--r);border:.5px solid var(--bdrm);background:var(--bg);font-size:13px;color:var(--txt);font-family:var(--font)">'+dayOpts.map(d=>'<option '+(it.days===d?'selected':'')+'>'+d+'</option>').join('')+'</select></div>'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">'
+    +'<div><label style="font-size:11px;color:var(--txt2);display:block;margin-bottom:3px">goal / target</label>'
+    +'<input id="ei-goal-'+id+'" value="'+esc(it.goal||'')+'" placeholder="e.g. 10,000 steps" style="width:100%;padding:6px 8px;border-radius:var(--r);border:.5px solid var(--bdrm);background:var(--bg);font-size:13px;color:var(--txt);font-family:var(--font)"></div>'
+    +'<div><label style="font-size:11px;color:var(--txt2);display:block;margin-bottom:3px">remind (min before)</label>'
+    +'<input type="number" id="ei-remind-'+id+'" value="'+(it.remind||5)+'" style="width:100%;padding:6px 8px;border-radius:var(--r);border:.5px solid var(--bdrm);background:var(--bg);font-size:13px;color:var(--txt);font-family:var(--font)"></div>'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end">'
+    +'<button onclick="document.getElementById(&quot;edit-'+id+'&quot;).style.display=&quot;none&quot;" style="padding:6px 12px;border-radius:var(--r);border:.5px solid var(--bdrm);background:transparent;font-size:12px;cursor:pointer;color:var(--txt);font-family:var(--font)">cancel</button>'
+    +'<button onclick="saveInlineEdit(&quot;'+id+'&quot;)" style="padding:6px 12px;border-radius:var(--r);border:.5px solid var(--teal);background:var(--teal);color:#fff;font-size:12px;cursor:pointer;font-family:var(--font)"><i class="ti ti-check"></i> save</button>'
+    +'</div>';
+  el.style.display='block';
+}
+function saveInlineEdit(id){
+  const it=state.items.find(i=>i.id===id); if(!it)return;
+  it.name    =document.getElementById('ei-name-'+id).value.trim()||it.name;
+  it.time    =document.getElementById('ei-time-'+id).value;
+  it.duration=parseInt(document.getElementById('ei-dur-'+id).value)||it.duration;
+  it.category=document.getElementById('ei-cat-'+id).value;
+  it.days    =document.getElementById('ei-days-'+id).value;
+  it.goal    =document.getElementById('ei-goal-'+id).value.trim();
+  it.remind  =parseInt(document.getElementById('ei-remind-'+id).value)||5;
+  save();renderSchedule();showToast('Item updated ✓');
 }
 function toggleAddForm(){const f=document.getElementById('add-form-container');f.style.display=f.style.display==='none'?'block':'none';}
 function addItem(){
@@ -1643,11 +1393,22 @@ function addItem(){
   save();toggleAddForm();document.getElementById('inp-name').value='';document.getElementById('inp-goal').value='';renderSchedule();
 }
 function deleteItem(id){if(!confirm('delete?'))return;state.items=state.items.filter(i=>i.id!==id);save();renderSchedule();}
-function clearAll(){if(!confirm('clear ALL items and history? cannot be undone.'))return;state.items=[];state.completions={};state.workLogs={};state.filterCat='all';save();renderSchedule();renderToday();}
-
-// ═══════════════════════════════════════════════════════════════════
-// IMPORT
-// ═══════════════════════════════════════════════════════════════════
+function clearAll(){
+  if(!confirm('clear ALL routine items and history?')) return;
+  const backup={items:JSON.parse(JSON.stringify(state.items)),completions:{...state.completions},workLogs:JSON.parse(JSON.stringify(state.workLogs))};
+  state.items=[];state.completions={};state.workLogs={};state.filterCat='all';save();
+  renderSchedule();renderToday();
+  let secs=5;
+  const tick=()=>{const t=document.getElementById('toast-el');if(!t)return;t.innerHTML='All cleared — <span onclick="undoClear()" style="text-decoration:underline;cursor:pointer;font-weight:600">UNDO ('+secs+'s)</span>';t.style.opacity='1';};
+  window._clearBackup=backup;tick();
+  const iv=setInterval(()=>{secs--;if(secs<=0){clearInterval(iv);const t=document.getElementById('toast-el');if(t)t.style.opacity='0';window._clearBackup=null;}else tick();},1000);
+  window._clearTimer=iv;
+}
+function undoClear(){
+  if(!window._clearBackup)return;clearInterval(window._clearTimer);
+  state.items=window._clearBackup.items;state.completions=window._clearBackup.completions;state.workLogs=window._clearBackup.workLogs;
+  window._clearBackup=null;save();renderSchedule();renderToday();showToast('Undo successful ✓');
+}
 function handleFileSelect(e){processFile(e.target.files[0]);}
 function handleDrop(e){e.preventDefault();document.getElementById('upload-zone').classList.remove('drag');processFile(e.dataTransfer.files[0]);}
 function normTime(raw){if(!raw&&raw!==0)return '';if(typeof raw==='number'){const t=Math.round(raw*24*60);return p2(Math.floor(t/60))+':'+p2(t%60);}const s=raw.toString().trim();return /^\d{1,2}:\d{2}/.test(s)?s.substring(0,5):s;}
@@ -2173,6 +1934,28 @@ function updateMacroPreview(){
   document.getElementById('prev-fat').textContent=ft>0?ft+'g':'?';
 }
 
+function saveRecentFood(f){
+  try{
+    const key='recentFoods_'+(window._currentUser?.uid||'guest');
+    let recent=JSON.parse(localStorage.getItem(key)||'[]');
+    recent=recent.filter(r=>r.name!==f.name);
+    recent.unshift({name:f.name,cal:f.cal,protein:f.protein||0,carbs:f.carbs||0,fat:f.fat||0,unit:f.unit,veg:f.veg??1});
+    localStorage.setItem(key,JSON.stringify(recent.slice(0,8)));
+  }catch(e){}
+}
+function getRecentFoods(){
+  try{return JSON.parse(localStorage.getItem('recentFoods_'+(window._currentUser?.uid||'guest'))||'[]');}catch(e){return[];}
+}
+function renderRecentFoods(){
+  const recent=getRecentFoods();
+  const wrap=document.getElementById('recent-foods-wrap');
+  const el=document.getElementById('recent-foods');
+  if(!wrap||!el)return;
+  if(!recent.length){wrap.style.display='none';return;}
+  wrap.style.display='block';
+  el.innerHTML=recent.map((f,i)=>'<span onclick="selectFood(window._recentFoods['+i+'])" style="font-size:11px;padding:3px 9px;border-radius:20px;background:var(--bg2);border:.5px solid var(--bdr);cursor:pointer;color:var(--txt2);display:inline-block;margin:2px" title="'+esc(f.name)+' — '+f.cal+' kcal/'+f.unit+'">'+esc(f.name)+'</span>').join('');
+  window._recentFoods=recent.map(f=>normFood(f));
+}
 function logFoodEntry(){
   if(!selectedFood){alert('please select a food first');return;}
   const qty=parseFloat(document.getElementById('food-qty').value)||1;
@@ -2191,9 +1974,11 @@ function logFoodEntry(){
     custom:!!selectedFood.custom,
     time:new Date().toTimeString().slice(0,5)
   });
+  saveRecentFood(selectedFood);
   clearFoodSelection();
   save();
   renderMeals();
+  showToast(selectedFood.name+' logged ✓');
 }
 
 function clearFoodSelection(){
@@ -2962,20 +2747,38 @@ const _bootSettings = getSettings();
 applyTheme(_bootSettings.theme);
 // Auth module handles calling renderCurrentOrBoot() after sign-in
 // For offline mode without Firebase, auto-check happens in the module timeout
-// If no Firebase and no active user found within 200ms, show auth
+// If no Firebase and no active user found within 250ms, show auth
 setTimeout(() => {
   if(!window._currentUser) {
-    showAuthScreen();
-    // pre-populate offline note
-    const noteEl = document.getElementById('auth-offline-note');
-    if(noteEl && !window.FIREBASE_READY) noteEl.textContent = '⚠ Offline mode: accounts stored on this device only.';
+    if (typeof showAuthScreen === 'function') {
+      showAuthScreen();
+      const noteEl = document.getElementById('auth-offline-note');
+      if(noteEl && !window.FIREBASE_READY) noteEl.textContent = '⚠ Offline mode: accounts stored on this device only.';
+    } else {
+      // Auth module failed to load (network/ad-blocker/CDN issue) — fall back to a guest session so the app is never blank
+      console.warn('Auth module unavailable — falling back to guest mode');
+      window._currentUser = { uid: 'guest', email: 'guest@local', name: 'Guest' };
+      renderCurrentOrBoot();
+      const badge = document.getElementById('user-badge');
+      if (badge) badge.style.display = 'none';
+    }
   }
 }, 250);
+// Absolute final safety net: if nothing has rendered the today list after 2s, force a render
+setTimeout(() => {
+  const list = document.getElementById('today-list');
+  if (list && !list.innerHTML.trim()) {
+    console.warn('Nothing rendered after 2s — forcing boot render');
+    if (!window._currentUser) window._currentUser = { uid: 'guest', email: 'guest@local', name: 'Guest' };
+    const authScreen = document.getElementById('auth-screen');
+    if (authScreen) authScreen.style.display = 'none';
+    renderCurrentOrBoot();
+  }
+}, 2000);
 if('Notification' in window&&Notification.permission==='default') Notification.requestPermission();
 setInterval(checkReminders,60000);
-</script>
 
-<script>
+
 // ── Service Worker (PWA offline support) ──────────────────────────
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -3002,7 +2805,7 @@ function installApp() {
     _installPrompt.userChoice.then(() => { _installPrompt = null; });
   }
 }
-</script>
 
+</script>
 </body>
 </html>
