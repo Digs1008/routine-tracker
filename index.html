@@ -12,8 +12,13 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script type="module">
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { initializeApp }          from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getFirestore, doc, setDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+         signOut, onAuthStateChanged, updateProfile }
+                                   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+
+// ─── STEP 1: paste your Firebase config here ────────────────────────
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyBcJgURkeBthHabtHjq130U9SEeIpR4IU8",
   authDomain: "dig-routine-tracker.firebaseapp.com",
@@ -22,25 +27,139 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "194398144251",
   appId: "1:194398144251:web:c1a09fdab47d2b6604925e",
 };
+// ────────────────────────────────────────────────────────────────────
+
 const FIREBASE_READY = !FIREBASE_CONFIG.apiKey.includes('PASTE');
 window.FIREBASE_READY = FIREBASE_READY;
-if(FIREBASE_READY){
-  const app=initializeApp(FIREBASE_CONFIG), db=getFirestore(app);
-  const ref=doc(db,'routine','shared');
-  onSnapshot(ref,snap=>{
-    if(snap.exists()){
-      const r=snap.data();
-      state.items=r.items||state.items;
-      state.completions=r.completions||state.completions;
-      state.workLogs=r.workLogs||state.workLogs;
-      state.mealLogs=r.mealLogs||state.mealLogs;
-      renderCurrent();
+
+if (FIREBASE_READY) {
+  const app  = initializeApp(FIREBASE_CONFIG);
+  const db   = getFirestore(app);
+  const auth = getAuth(app);
+  let unsub  = null;
+
+  onAuthStateChanged(auth, user => {
+    if (user) {
+      window._currentUser = { uid: user.uid, email: user.email, name: user.displayName || user.email.split('@')[0] };
+      if (unsub) unsub();
+      const ref = doc(db, 'users', user.uid, 'data', 'main');
+      unsub = onSnapshot(ref, snap => {
+        if (snap.exists()) {
+          const r = snap.data();
+          state.items       = r.items       || state.items;
+          state.completions = r.completions || state.completions;
+          state.workLogs    = r.workLogs    || state.workLogs;
+          state.mealLogs    = r.mealLogs    || state.mealLogs;
+          state.bodyMetrics = r.bodyMetrics || state.bodyMetrics;
+          state.waterLog    = r.waterLog    || state.waterLog;
+          renderCurrent();
+        }
+      });
+      hideAuthScreen();
+    } else {
+      window._currentUser = null;
+      if (unsub) { unsub(); unsub = null; }
+      showAuthScreen();
     }
   });
-  window._saveToFirebase=async()=>{
-    try{ await setDoc(ref,{items:state.items,completions:state.completions,workLogs:state.workLogs,mealLogs:state.mealLogs,updatedAt:Date.now()}); }catch(e){}
+
+  window._saveToFirebase = async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+    try {
+      const ref = doc(db, 'users', user.uid, 'data', 'main');
+      await setDoc(ref, {
+        items: state.items, completions: state.completions,
+        workLogs: state.workLogs, mealLogs: state.mealLogs,
+        bodyMetrics: state.bodyMetrics, waterLog: state.waterLog,
+        updatedAt: Date.now()
+      });
+    } catch(e) { console.warn('Firebase save failed', e); }
   };
-} else { window._saveToFirebase=()=>{}; }
+
+  window._authSignUp = async (email, pass, name) => {
+    const cred = await createUserWithEmailAndPassword(auth, email, pass);
+    await updateProfile(cred.user, { displayName: name });
+  };
+  window._authSignIn  = (email, pass) => signInWithEmailAndPassword(auth, email, pass);
+  window._authSignOut = () => { if (unsub){unsub();unsub=null;} signOut(auth); };
+
+} else {
+  // Offline mode — local-storage based per-device account system
+  window._saveToFirebase = () => {};
+
+  window._authSignUp = async (email, pass, name) => {
+    const profiles = JSON.parse(localStorage.getItem('rt_profiles') || '[]');
+    if (profiles.find(p => p.email === email)) throw new Error('Email already registered');
+    const uid = 'local_' + Date.now();
+    profiles.push({ uid, email, name, pass });
+    localStorage.setItem('rt_profiles', JSON.stringify(profiles));
+    window._currentUser = { uid, email, name };
+    localStorage.setItem('rt_activeUser', JSON.stringify(window._currentUser));
+    hideAuthScreen();
+  };
+  window._authSignIn = async (email, pass) => {
+    const profiles = JSON.parse(localStorage.getItem('rt_profiles') || '[]');
+    const p = profiles.find(p => p.email === email && p.pass === pass);
+    if (!p) throw new Error('Invalid email or password');
+    window._currentUser = { uid: p.uid, email: p.email, name: p.name };
+    localStorage.setItem('rt_activeUser', JSON.stringify(window._currentUser));
+    hideAuthScreen();
+  };
+  window._authSignOut = () => {
+    window._currentUser = null;
+    localStorage.removeItem('rt_activeUser');
+    state.items=[]; state.completions={}; state.workLogs={};
+    state.mealLogs={}; state.bodyMetrics=[]; state.waterLog={};
+    showAuthScreen();
+  };
+
+  // Auto-login if a previous session exists on this device
+  setTimeout(() => {
+    const active = localStorage.getItem('rt_activeUser');
+    if (active) { window._currentUser = JSON.parse(active); hideAuthScreen(); }
+    else showAuthScreen();
+  }, 100);
+}
+
+function showAuthScreen() {
+  const el = document.getElementById('auth-screen');
+  if (el) el.style.display = 'flex';
+  const btn = document.getElementById('auth-submit-btn');
+  if (btn) { btn.disabled = false; btn.textContent = 'sign in'; }
+  const err = document.getElementById('auth-error'); if (err) err.textContent = '';
+  const emailEl = document.getElementById('auth-email'); if (emailEl) emailEl.value = '';
+  const passEl  = document.getElementById('auth-pass');  if (passEl)  passEl.value  = '';
+  const si = document.getElementById('tab-signin'), su = document.getElementById('tab-signup');
+  if (si) { si.classList.add('active'); si.style.background='var(--teal)'; si.style.color='#fff'; }
+  if (su) { su.classList.remove('active'); su.style.background='transparent'; su.style.color='var(--txt2)'; }
+  const nr = document.getElementById('auth-signup-name'); if (nr) nr.style.display = 'none';
+  const note = document.getElementById('auth-offline-note');
+  if (note) note.textContent = window.FIREBASE_READY ? '' : 'Offline mode: accounts stored on this device only.';
+}
+function hideAuthScreen() {
+  const el = document.getElementById('auth-screen');
+  if (el) el.style.display = 'none';
+  const uid = window._currentUser?.uid;
+  if (uid) {
+    try {
+      const s = localStorage.getItem('rtV3_'+uid);
+      if (s) {
+        const p = JSON.parse(s);
+        state.items       = p.items       || [];
+        state.completions = p.completions || {};
+        state.workLogs    = p.workLogs    || {};
+        state.mealLogs     = p.mealLogs    || {};
+        state.bodyMetrics  = p.bodyMetrics || [];
+        state.waterLog     = p.waterLog    || {};
+      }
+    } catch(e) {}
+  }
+  renderCurrentOrBoot();
+  updateUserBadge();
+}
+window.showAuthScreen = showAuthScreen;
+window.hideAuthScreen = hideAuthScreen;
 </script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -274,6 +393,71 @@ input[type="file"]{display:none}
   .macro-preview{grid-template-columns:repeat(2,1fr)}
   .daily-nutrition{grid-template-columns:repeat(2,1fr)}
 }
+/* ── HOME DASHBOARD ── */
+.hero-card{background:linear-gradient(135deg,var(--teal) 0%,#0d7a5a 100%);border-radius:var(--rl);padding:20px;margin-bottom:14px;color:#fff;position:relative;overflow:hidden}
+.hero-card::before{content:'';position:absolute;top:-30%;right:-10%;width:160px;height:160px;background:rgba(255,255,255,.08);border-radius:50%}
+.hero-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;position:relative;z-index:1}
+.hero-greeting{font-size:13px;opacity:.85}
+.hero-level{display:flex;align-items:center;gap:8px}
+.level-badge{width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.18);border:2px solid rgba(255,255,255,.4);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700}
+.level-info .lv-num{font-size:11px;opacity:.8}
+.level-info .lv-title{font-size:14px;font-weight:600}
+.xp-bar-wrap{position:relative;z-index:1}
+.xp-bar-label{display:flex;justify-content:space-between;font-size:11px;opacity:.85;margin-bottom:5px}
+.xp-bar-bg{height:10px;background:rgba(255,255,255,.2);border-radius:6px;overflow:hidden}
+.xp-bar-fill{height:100%;background:#fff;border-radius:6px;transition:width .6s cubic-bezier(.4,0,.2,1)}
+.streak-row{display:flex;align-items:center;gap:6px;margin-top:12px;position:relative;z-index:1}
+.streak-flame{font-size:18px}
+.streak-text{font-size:13px;font-weight:600}
+.streak-sub{font-size:11px;opacity:.8}
+
+.ring-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
+.ring-card{background:var(--bg);border:.5px solid var(--bdr);border-radius:var(--rl);padding:12px 8px;text-align:center;cursor:pointer;transition:transform .15s}
+.ring-card:hover{transform:translateY(-2px)}
+.ring-wrap{position:relative;width:64px;height:64px;margin:0 auto 6px}
+.ring-wrap svg{transform:rotate(-90deg)}
+.ring-bg{fill:none;stroke:var(--bg2);stroke-width:6}
+.ring-fg{fill:none;stroke-width:6;stroke-linecap:round;transition:stroke-dashoffset .8s cubic-bezier(.4,0,.2,1)}
+.ring-icon{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:18px}
+.ring-label{font-size:10px;color:var(--txt2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px}
+.ring-value{font-size:12px;font-weight:700}
+
+.badge-strip{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px}
+.badge-pill{flex-shrink:0;display:flex;align-items:center;gap:6px;background:var(--bg);border:.5px solid var(--bdr);border-radius:20px;padding:6px 12px 6px 6px;font-size:12px;font-weight:500;white-space:nowrap}
+.badge-pill.locked{opacity:.4}
+.badge-icon{width:24px;height:24px;border-radius:50%;background:var(--tl);display:flex;align-items:center;justify-content:center;font-size:13px}
+.badge-pill.locked .badge-icon{background:var(--bg2)}
+
+.todo-mini-card{background:var(--bg);border:.5px solid var(--bdr);border-radius:var(--rl);padding:14px;margin-bottom:14px}
+.todo-mini-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.todo-mini-hdr h4{font-size:12px;font-weight:600;color:var(--txt2);text-transform:uppercase;letter-spacing:.5px;margin:0}
+.todo-mini-item{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:.5px solid var(--bdr)}
+.todo-mini-item:last-child{border:none}
+.todo-mini-check{width:22px;height:22px;border-radius:50%;border:2px solid var(--bdrm);display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;transition:all .15s}
+.todo-mini-check:hover{border-color:var(--teal)}
+.todo-mini-check.dn{background:var(--teal);border-color:var(--teal);color:#fff}
+.todo-mini-name{font-size:13px;font-weight:500;flex:1}
+.todo-mini-time{font-size:11px;color:var(--txt3)}
+.todo-mini-empty{text-align:center;padding:16px;color:var(--txt2);font-size:13px}
+
+.quest-card{background:var(--gl);border:.5px solid #c9e6a0;border-radius:var(--rl);padding:14px;margin-bottom:14px}
+.quest-hdr{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.quest-hdr i{color:var(--grn);font-size:18px}
+.quest-title{font-size:13px;font-weight:600;color:var(--grn)}
+.quest-desc{font-size:12px;color:var(--txt2);line-height:1.5}
+.quest-reward{font-size:11px;color:var(--grn);font-weight:600;margin-top:6px}
+
+@keyframes confettiFall{0%{transform:translateY(-20px) rotate(0deg);opacity:1}100%{transform:translateY(400px) rotate(720deg);opacity:0}}
+.confetti-piece{position:fixed;top:0;width:8px;height:8px;z-index:99999;pointer-events:none;animation:confettiFall 1.4s ease-in forwards}
+@keyframes popIn{0%{transform:scale(.3);opacity:0}60%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}
+.level-up-toast{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:linear-gradient(135deg,#FFD700,#FFA500);color:#3a2800;padding:20px 32px;border-radius:20px;font-size:16px;font-weight:700;z-index:99998;box-shadow:0 10px 40px rgba(0,0,0,.3);animation:popIn .4s cubic-bezier(.34,1.56,.64,1);text-align:center}
+.level-up-toast .lu-sub{font-size:12px;font-weight:500;margin-top:4px;opacity:.8}
+
+@media(max-width:500px){
+  .ring-grid{grid-template-columns:repeat(2,1fr);gap:10px}
+  .ring-wrap{width:56px;height:56px}
+}
+
 </style>
 </head>
 <body>
@@ -293,7 +477,8 @@ input[type="file"]{display:none}
       <button class="signout-btn" onclick="doSignOut()" style="font-size:11px;padding:3px 9px;border-radius:20px;border:.5px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;font-family:var(--font)"><i class="ti ti-logout" style="font-size:11px"></i> sign out</button>
     </div>
     <div class="desktop-tabs" id="desktop-tabs">
-      <button class="nav-tab active" onclick="showView('today')"><i class="ti ti-calendar-check"></i> today</button>
+      <button class="nav-tab active" onclick="showView('home')"><i class="ti ti-sparkles"></i> home</button>
+      <button class="nav-tab" onclick="showView('today')"><i class="ti ti-calendar-check"></i> today</button>
       <button class="nav-tab" onclick="showView('meals')"><i class="ti ti-salad"></i> meals</button>
       <button class="nav-tab" onclick="showView('work')"><i class="ti ti-briefcase"></i> work log</button>
       <button class="nav-tab" onclick="showView('summary')"><i class="ti ti-file-text"></i> summary</button>
@@ -335,8 +520,23 @@ input[type="file"]{display:none}
   </div>
 </div>
 
+<!-- HOME DASHBOARD -->
+<div id="view-home" class="view active">
+  <div class="hero-card" id="hero-card"></div>
+  <div class="ring-grid" id="ring-grid"></div>
+  <div class="badge-strip" id="badge-strip"></div>
+  <div class="quest-card" id="quest-card" style="display:none"></div>
+  <div class="todo-mini-card">
+    <div class="todo-mini-hdr">
+      <h4><i class="ti ti-list-check" style="margin-right:5px;color:var(--teal)"></i>next up today</h4>
+      <span class="badge" id="todo-mini-count"></span>
+    </div>
+    <div id="todo-mini-list"></div>
+  </div>
+</div>
+
 <!-- TODAY -->
-<div id="view-today" class="view active">
+<div id="view-today" class="view">
   <div id="setup-banner-today"></div>
   <div class="date-bar">
     <div class="date-label" id="today-label"></div>
@@ -601,7 +801,8 @@ input[type="file"]{display:none}
 
 <!-- Mobile bottom nav -->
 <nav class="bottom-nav">
-  <button class="bnav-btn active" onclick="showView('today')"    id="bn-today">   <i class="ti ti-calendar-check"></i>today</button>
+  <button class="bnav-btn active" onclick="showView('home')"     id="bn-home">    <i class="ti ti-sparkles"></i>home</button>
+  <button class="bnav-btn"        onclick="showView('today')"    id="bn-today">   <i class="ti ti-calendar-check"></i>today</button>
   <button class="bnav-btn"        onclick="showView('meals')"    id="bn-meals">   <i class="ti ti-salad"></i>meals</button>
   <button class="bnav-btn"        onclick="showView('work')"     id="bn-work">    <i class="ti ti-briefcase"></i>work</button>
   <button class="bnav-btn"        onclick="showView('summary')"  id="bn-summary"> <i class="ti ti-file-text"></i>summary</button>
@@ -620,7 +821,7 @@ const SHORTDAY=['sun','mon','tue','wed','thu','fri','sat'];
 const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const FULLDAY=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const CAT_COLORS={health:'#1D9E75',fitness:'#D85A30',work:'#185FA5',personal:'#534AB7',meal:'#BA7517',learning:'#3B6D11'};
-const VIEWS=['today','meals','metrics','work','summary','coach','reports','schedule','settings','import'];
+const VIEWS=['home','today','meals','work','summary','coach','reports','schedule','import'];
 
 // ═══════════════════════════════════════════════════════════════════
 // STATE
@@ -631,7 +832,7 @@ let state={
   reportPeriod:'week', pendingImport:[], filterCat:'all',
   taskChips:[], activeMealType:'breakfast', editingWorkEntry: null
 };
-let currentView='today';
+let currentView='home';
 let selectedFood=null; // {name, cal, protein, carbs, fat, unit, perUnit}
 
 // ═══════════════════════════════════════════════════════════════════
@@ -709,18 +910,17 @@ function calcStreak(){
 function showView(v){
   currentView=v;
   document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
-  document.getElementById('view-'+v).classList.add('active');
+  const el=document.getElementById('view-'+v); if(el) el.classList.add('active');
   document.querySelectorAll('.nav-tab').forEach((el,i)=>el.classList.toggle('active',VIEWS[i]===v));
   VIEWS.forEach(n=>{const b=document.getElementById('bn-'+n);if(b)b.classList.toggle('active',n===v);});
-  if(v==='today')    renderToday();
-  if(v==='meals')    renderMeals();
-  if(v==='metrics')  { renderMetrics(); document.getElementById('inp-metric-date').value=todayStr(); }
-  if(v==='work')     renderWork();
-  if(v==='summary')  renderSummary();
-  if(v==='coach')    renderCoach();
-  if(v==='reports')  renderReports();
-  if(v==='schedule') renderSchedule();
-  if(v==='settings') { renderSettings(); renderCustomFoodsList(); renderTemplatesList(); }
+  if(v==='home')      renderHome();
+  if(v==='today')     renderToday();
+  if(v==='meals')     renderMeals();
+  if(v==='work')      renderWork();
+  if(v==='summary')   renderSummary();
+  if(v==='coach')     renderCoach();
+  if(v==='reports')   renderReports();
+  if(v==='schedule')  renderSchedule();
 }
 function renderCurrent(){showView(currentView);}
 
@@ -753,6 +953,267 @@ function maybeShowSetup(){
 // ═══════════════════════════════════════════════════════════════════
 // TODAY
 // ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
+// HOME DASHBOARD — gamified overview (XP, levels, badges, rings)
+// ═══════════════════════════════════════════════════════════════════
+const LEVEL_TITLES=['Newbie','Apprentice','Achiever','Consistent','Disciplined','Habit Master','Routine Pro','Elite','Champion','Legend'];
+const BADGE_DEFS=[
+  {id:'first_day',   icon:'🌱', name:'First Step',     test:s=>s.totalDaysActive>=1},
+  {id:'streak_3',     icon:'🔥', name:'3-Day Streak',   test:s=>s.streak>=3},
+  {id:'streak_7',     icon:'⚡', name:'Week Warrior',   test:s=>s.streak>=7},
+  {id:'streak_30',    icon:'👑', name:'Habit Royalty',  test:s=>s.streak>=30},
+  {id:'perfect_day',  icon:'💯', name:'Perfect Day',    test:s=>s.todayAdh===100},
+  {id:'hydrated',     icon:'💧', name:'Hydrated',       test:s=>s.waterDone>=s.waterTarget},
+  {id:'logged_meals', icon:'🍽', name:'Mindful Eater',  test:s=>s.mealCount>=3},
+  {id:'level_5',      icon:'🏆', name:'Level 5',        test:s=>s.level>=5},
+];
+function xpStorageKey(){return 'rtXP_'+(window._currentUser?.uid||'guest');}
+function getXPState(){
+  try{const s=localStorage.getItem(xpStorageKey());return s?JSON.parse(s):{xp:0,lastLevel:1,unlockedBadges:[],daysActive:[]};}
+  catch(e){return{xp:0,lastLevel:1,unlockedBadges:[],daysActive:[]};}
+}
+function saveXPState(x){try{localStorage.setItem(xpStorageKey(),JSON.stringify(x));}catch(e){}}
+function xpForLevel(level){return Math.round(100*Math.pow(level,1.4));} // increasing XP curve
+function levelFromXP(xp){
+  let lvl=1,acc=0;
+  while(acc+xpForLevel(lvl)<=xp){acc+=xpForLevel(lvl);lvl++;}
+  return {level:lvl, xpIntoLevel:xp-acc, xpForThisLevel:xpForLevel(lvl)};
+}
+function awardXP(amount,reason){
+  const x=getXPState();
+  const before=levelFromXP(x.xp).level;
+  x.xp=Math.max(0,x.xp+amount);
+  const after=levelFromXP(x.xp).level;
+  const today=todayStr();
+  if(!x.daysActive.includes(today))x.daysActive.push(today);
+  saveXPState(x);
+  if(after>before){
+    showLevelUpToast(after);
+    fireConfetti();
+  }
+  return x;
+}
+function showLevelUpToast(level){
+  const t=document.createElement('div');
+  t.className='level-up-toast';
+  const title=LEVEL_TITLES[Math.min(level-1,LEVEL_TITLES.length-1)];
+  t.innerHTML='🎉 LEVEL UP!<div class="lu-sub">You reached Level '+level+' — '+title+'</div>';
+  document.body.appendChild(t);
+  setTimeout(()=>{t.style.transition='opacity .4s';t.style.opacity='0';setTimeout(()=>t.remove(),400);},2200);
+}
+function fireConfetti(){
+  const colors=['#1D9E75','#BA7517','#534AB7','#D85A30','#185FA5','#FFD700'];
+  for(let i=0;i<28;i++){
+    const p=document.createElement('div');
+    p.className='confetti-piece';
+    p.style.left=Math.random()*100+'vw';
+    p.style.background=colors[Math.floor(Math.random()*colors.length)];
+    p.style.animationDelay=(Math.random()*0.3)+'s';
+    p.style.borderRadius=Math.random()>0.5?'50%':'2px';
+    document.body.appendChild(p);
+    setTimeout(()=>p.remove(),1800);
+  }
+}
+function unlockNewBadges(metrics){
+  const x=getXPState();
+  let newlyUnlocked=[];
+  BADGE_DEFS.forEach(b=>{
+    if(!x.unlockedBadges.includes(b.id)&&b.test(metrics)){
+      x.unlockedBadges.push(b.id);
+      newlyUnlocked.push(b);
+    }
+  });
+  if(newlyUnlocked.length){saveXPState(x);}
+  return newlyUnlocked;
+}
+
+function computeDashboardMetrics(){
+  const today=todayStr();
+  const s=getSettings();
+  const allItems=state.items.filter(i=>dayApplies(i,today));
+  const doneItems=allItems.filter(i=>isCompleted(i.id,today));
+  const todayAdh=allItems.length?Math.round(doneItems.length/allItems.length*100):0;
+
+  // Exercise minutes: completed items today in health/fitness category with a duration
+  const exerciseItems=doneItems.filter(i=>(i.category==='health'||i.category==='fitness')&&i.duration);
+  const exerciseMin=exerciseItems.reduce((s2,i)=>s2+(parseInt(i.duration)||0),0);
+  const exerciseTarget=60; // sensible default daily movement target
+
+  // Nutrition
+  const mealEntries=(state.mealLogs[today]||[]);
+  const calTotal=mealEntries.reduce((s2,e)=>s2+(e.cal||0),0);
+  const calTarget=s.calTarget||2000;
+
+  // Water
+  const waterDone=getWaterToday();
+  const waterTarget=s.waterTarget||8;
+
+  const xpState=getXPState();
+  const {level,xpIntoLevel,xpForThisLevel}=levelFromXP(xpState.xp);
+  const streak=calcStreak();
+
+  return{
+    today,todayAdh,doneCount:doneItems.length,totalCount:allItems.length,
+    exerciseMin,exerciseTarget,
+    calTotal,calTarget,
+    waterDone,waterTarget,
+    mealCount:mealEntries.length,
+    level,xpIntoLevel,xpForThisLevel,xp:xpState.xp,
+    streak,
+    totalDaysActive:xpState.daysActive.length,
+  };
+}
+
+function ringSVG(pct,color){
+  const r=28,c=2*Math.PI*r,offset=c-(Math.min(pct,100)/100)*c;
+  return '<svg width="64" height="64" viewBox="0 0 64 64">'
+    +'<circle class="ring-bg" cx="32" cy="32" r="'+r+'"></circle>'
+    +'<circle class="ring-fg" cx="32" cy="32" r="'+r+'" stroke="'+color+'" stroke-dasharray="'+c+'" stroke-dashoffset="'+offset+'"></circle>'
+    +'</svg>';
+}
+
+let _lastDashAward=null; // prevent double-awarding XP for same state in one session
+function renderHome(){
+  const m=computeDashboardMetrics();
+
+  // ── Hero card: level, XP bar, streak ──
+  const title=LEVEL_TITLES[Math.min(m.level-1,LEVEL_TITLES.length-1)];
+  const hour=new Date().getHours();
+  const greeting=hour<12?'Good morning':hour<17?'Good afternoon':'Good evening';
+  const xpPct=m.xpForThisLevel?Math.round(m.xpIntoLevel/m.xpForThisLevel*100):0;
+  const streakHtml=m.streak>0
+    ?'<span class="streak-flame">🔥</span><span class="streak-text">'+m.streak+'-day streak</span><span class="streak-sub">keep it going!</span>'
+    :'<span class="streak-flame">💤</span><span class="streak-text">no streak yet</span><span class="streak-sub">complete today to start one</span>';
+  document.getElementById('hero-card').innerHTML=
+    '<div class="hero-top">'
+    +'<div><div class="hero-greeting">'+greeting+', '+(window._currentUser?.name?esc(window._currentUser.name):'there')+'</div></div>'
+    +'<div class="hero-level"><div class="level-badge">'+m.level+'</div><div class="level-info"><div class="lv-num">LEVEL '+m.level+'</div><div class="lv-title">'+title+'</div></div></div>'
+    +'</div>'
+    +'<div class="xp-bar-wrap"><div class="xp-bar-label"><span>'+m.xpIntoLevel+' / '+m.xpForThisLevel+' XP</span><span>'+xpPct+'%</span></div>'
+    +'<div class="xp-bar-bg"><div class="xp-bar-fill" style="width:'+xpPct+'%"></div></div></div>'
+    +'<div class="streak-row">'+streakHtml+'</div>';
+
+  // ── Progress rings ──
+  const rings=[
+    {key:'adherence',label:'adherence',icon:'✅',pct:m.todayAdh,color:'#1D9E75',sub:m.doneCount+'/'+m.totalCount+' tasks'},
+    {key:'calories',label:'calories',icon:'🍽',pct:m.calTarget?Math.round(m.calTotal/m.calTarget*100):0,color:'#BA7517',sub:Math.round(m.calTotal)+'/'+m.calTarget+' kcal'},
+    {key:'water',label:'water',icon:'💧',pct:m.waterTarget?Math.round(m.waterDone/m.waterTarget*100):0,color:'#185FA5',sub:m.waterDone+'/'+m.waterTarget+' glasses'},
+    {key:'exercise',label:'exercise',icon:'💪',pct:m.exerciseTarget?Math.round(m.exerciseMin/m.exerciseTarget*100):0,color:'#D85A30',sub:m.exerciseMin+'/'+m.exerciseTarget+' min'},
+  ];
+  document.getElementById('ring-grid').innerHTML=rings.map(r=>{
+    const navTarget=r.key==='calories'||r.key==='water'?'meals':r.key==='exercise'?'today':'today';
+    return '<div class="ring-card" onclick="showView(&quot;'+navTarget+'&quot;)" title="'+r.sub+'">'
+      +'<div class="ring-wrap">'+ringSVG(r.pct,r.color)+'<div class="ring-icon">'+r.icon+'</div></div>'
+      +'<div class="ring-label">'+r.label+'</div>'
+      +'<div class="ring-value" style="color:'+r.color+'">'+Math.min(r.pct,100)+'%</div>'
+      +'</div>';
+  }).join('');
+
+  // ── Badges ──
+  const xpState=getXPState();
+  document.getElementById('badge-strip').innerHTML=BADGE_DEFS.map(b=>{
+    const unlocked=xpState.unlockedBadges.includes(b.id);
+    return '<div class="badge-pill '+(unlocked?'':'locked')+'" title="'+esc(b.name)+(unlocked?' — unlocked!':' — locked')+'">'
+      +'<span class="badge-icon">'+(unlocked?b.icon:'🔒')+'</span>'+esc(b.name)+'</div>';
+  }).join('');
+
+  // ── Daily quest (simple rotating challenge) ──
+  renderDailyQuest(m);
+
+  // ── Next 2-3 todos ──
+  renderTodoMini(m);
+
+  // ── XP awarding: based on today's progress, idempotent per render via comparison ──
+  processXPForToday(m);
+
+  // ── Badge unlock celebration ──
+  const newBadges=unlockNewBadges(m);
+  if(newBadges.length){
+    setTimeout(()=>{
+      newBadges.forEach((b,i)=>{
+        setTimeout(()=>showToast(b.icon+' Badge unlocked: '+b.name+'!',3000),i*400);
+      });
+      fireConfetti();
+    },300);
+  }
+}
+
+function renderDailyQuest(m){
+  const el=document.getElementById('quest-card');
+  const remaining=m.totalCount-m.doneCount;
+  let quest=null;
+  if(m.todayAdh===100&&m.totalCount>0){
+    quest={icon:'ti-trophy',title:'Quest complete!',desc:'You finished every task today. Outstanding discipline.',reward:'+50 XP awarded'};
+  }else if(remaining>0&&remaining<=2){
+    quest={icon:'ti-target-arrow',title:'Almost there!',desc:'Just '+remaining+' task'+(remaining>1?'s':'')+' left to complete a perfect day.',reward:'Finish for +50 XP bonus'};
+  }else if(m.waterDone<m.waterTarget){
+    quest={icon:'ti-droplet',title:'Stay hydrated',desc:'Drink '+(m.waterTarget-m.waterDone)+' more glass'+(m.waterTarget-m.waterDone>1?'es':'')+' of water today.',reward:'+5 XP per glass'};
+  }else if(m.exerciseMin<30){
+    quest={icon:'ti-run',title:'Get moving',desc:'Log at least 30 minutes of exercise today.',reward:'+20 XP'};
+  }
+  if(quest){
+    el.style.display='block';
+    el.innerHTML='<div class="quest-hdr"><i class="ti '+quest.icon+'"></i><span class="quest-title">'+quest.title+'</span></div>'
+      +'<div class="quest-desc">'+quest.desc+'</div>'
+      +'<div class="quest-reward">🎁 '+quest.reward+'</div>';
+  }else{el.style.display='none';}
+}
+
+function renderTodoMini(m){
+  const today=todayStr();
+  const now=new Date(),nowMin=now.getHours()*60+now.getMinutes();
+  const pending=state.items.filter(i=>dayApplies(i,today)&&!isCompleted(i.id,today))
+    .sort((a,b)=>(a.time||'').localeCompare(b.time||''))
+    .slice(0,3);
+  document.getElementById('todo-mini-count').textContent=pending.length+' pending';
+  const el=document.getElementById('todo-mini-list');
+  if(!pending.length){
+    el.innerHTML='<div class="todo-mini-empty">🎉 Nothing pending — you are all caught up!</div>';
+    return;
+  }
+  el.innerHTML=pending.map(it=>{
+    const[h,mn]=(it.time||'00:00').split(':').map(Number);
+    const overdue=h*60+mn<nowMin;
+    return '<div class="todo-mini-item">'
+      +'<div class="todo-mini-check" onclick="toggleCompleteFromHome(&quot;'+it.id+'&quot;)"></div>'
+      +'<span class="todo-mini-name">'+esc(it.name)+'</span>'
+      +'<span class="todo-mini-time" style="'+(overdue?'color:var(--red)':'')+'">'+(it.time||'')+'</span>'
+      +'</div>';
+  }).join('');
+}
+function toggleCompleteFromHome(id){
+  const today=todayStr();
+  toggleComplete(id,today);
+  awardXP(10,'task_complete');
+  renderHome();
+}
+
+// Award XP once per unique progress milestone per day (stored to avoid double-awarding on every render)
+function processXPForToday(m){
+  const key='xpAwarded_'+m.today+'_'+(window._currentUser?.uid||'guest');
+  let awarded;
+  try{awarded=JSON.parse(localStorage.getItem(key)||'{}');}catch(e){awarded={};}
+  let changed=false;
+
+  // Perfect day bonus
+  if(m.todayAdh===100&&m.totalCount>0&&!awarded.perfectDay){
+    awardXP(50,'perfect_day');awarded.perfectDay=true;changed=true;
+  }
+  // Water target reached
+  if(m.waterDone>=m.waterTarget&&m.waterTarget>0&&!awarded.waterGoal){
+    awardXP(15,'water_goal');awarded.waterGoal=true;changed=true;
+  }
+  // Exercise milestone
+  if(m.exerciseMin>=30&&!awarded.exercise30){
+    awardXP(20,'exercise_30');awarded.exercise30=true;changed=true;
+  }
+  // Meal logging milestone
+  if(m.mealCount>=3&&!awarded.mealsLogged){
+    awardXP(10,'meals_logged');awarded.mealsLogged=true;changed=true;
+  }
+  if(changed){try{localStorage.setItem(key,JSON.stringify(awarded));}catch(e){}}
+}
+
 function renderToday(){
   maybeShowSetup();
   const d=state.currentDate;
@@ -1539,7 +2000,7 @@ function renderCurrentOrBoot() {
   const _s = getSettings();
   applyTheme(_s.theme);
   setSyncDot(window.FIREBASE_READY ? 'live' : 'off');
-  renderToday();
+  renderHome();
   if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
 }
 
@@ -2764,10 +3225,10 @@ setTimeout(() => {
     }
   }
 }, 250);
-// Absolute final safety net: if nothing has rendered the today list after 2s, force a render
+// Absolute final safety net: if nothing has rendered the home dashboard after 2s, force a render
 setTimeout(() => {
-  const list = document.getElementById('today-list');
-  if (list && !list.innerHTML.trim()) {
+  const hero = document.getElementById('hero-card');
+  if (hero && !hero.innerHTML.trim()) {
     console.warn('Nothing rendered after 2s — forcing boot render');
     if (!window._currentUser) window._currentUser = { uid: 'guest', email: 'guest@local', name: 'Guest' };
     const authScreen = document.getElementById('auth-screen');
