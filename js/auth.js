@@ -11,6 +11,8 @@ const FIREBASE_CONFIG = {
 
 const FIREBASE_CONFIGURED = !FIREBASE_CONFIG.apiKey.includes('PASTE');
 window.FIREBASE_READY = false;
+window.FIREBASE_CONFIGURED = FIREBASE_CONFIGURED;
+window._firebaseInitDone = false;
 window._authBackend = 'local';
 
 function loadUserState() {
@@ -180,9 +182,12 @@ window.hideAuthScreen = hideAuthScreen;
 
 installLocalAuth();
 restoreLocalSession();
-installFirebaseAuth().catch(e => {
+installFirebaseAuth().then(() => {
+  window._firebaseInitDone = true;
+}).catch(e => {
   console.warn('Firebase unavailable; using local auth', e);
   window.FIREBASE_READY = false;
+  window._firebaseInitDone = true;
   window._authBackend = 'local';
   setSyncDot('off');
   const note = document.getElementById('auth-offline-note');

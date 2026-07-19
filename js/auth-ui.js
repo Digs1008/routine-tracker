@@ -16,13 +16,19 @@ function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').
 // AUTH HELPERS (called from HTML onclick)
 // ═══════════════════════════════════════════════════════════════════
 let _authMode = 'signin';
+function setAuthMessage(msg, tone) {
+  const el = document.getElementById('auth-error');
+  if (!el) return;
+  el.style.color = tone === 'ok' ? 'var(--teal)' : tone === 'info' ? 'var(--txt2)' : 'var(--red)';
+  el.textContent = msg;
+}
 function switchAuthTab(mode) {
   _authMode = mode;
   document.getElementById('tab-signin').classList.toggle('active', mode==='signin');
   document.getElementById('tab-signup').classList.toggle('active', mode==='signup');
   document.getElementById('auth-signup-name').style.display = mode==='signup' ? 'block' : 'none';
   document.getElementById('auth-submit-btn').textContent = mode==='signin' ? 'sign in' : 'create account';
-  document.getElementById('auth-error').textContent = '';
+  setAuthMessage('', 'info');
   if (!window.FIREBASE_READY) {
     document.getElementById('auth-offline-note').textContent =
       mode==='signup'
@@ -66,36 +72,53 @@ async function doAuth() {
 }
 async function sendPasswordReset() {
   const email = document.getElementById('auth-email').value.trim();
-  const errEl = document.getElementById('auth-error');
   const btn = document.getElementById('forgot-password-btn');
-  errEl.textContent = '';
+  setAuthMessage('', 'info');
   if (!email) {
-    errEl.textContent = 'Enter your email first, then tap forgot password.';
+    setAuthMessage('Enter your email first, then tap forgot password.');
     return;
   }
   if (!window._authResetPassword) {
-    errEl.textContent = 'App still loading, please wait a moment and try again.';
+    setAuthMessage('App still loading, please wait a moment and try again.');
     return;
   }
   const oldText = btn ? btn.textContent : '';
   if (btn) { btn.disabled = true; btn.textContent = 'sending...'; }
   try {
+    if (window.FIREBASE_CONFIGURED && window._authBackend !== 'firebase' && !window._firebaseInitDone) {
+      setAuthMessage('Connecting to Firebase for password reset...', 'info');
+      const started = Date.now();
+      while (window._authBackend !== 'firebase' && !window._firebaseInitDone && Date.now() - started < 5000) {
+        await new Promise(resolve => setTimeout(resolve, 150));
+      }
+    }
+    if (window._authBackend !== 'firebase') {
+      throw new Error(window.FIREBASE_CONFIGURED
+        ? 'Firebase is not available yet. Refresh the page and try again, or check the browser console for blocked Firebase scripts.'
+        : 'Password reset is available only when Firebase is configured.');
+    }
     await window._authResetPassword(email);
-    errEl.style.color = 'var(--teal)';
-    errEl.textContent = 'Password reset email sent. Check your inbox.';
+    setAuthMessage('Password reset email sent. Check your inbox.', 'ok');
   } catch(e) {
-    errEl.style.color = 'var(--red)';
     const msg = (e.message||'Password reset failed')
       .replace('Firebase: ','')
       .replace(/\(auth\/[^)]+\)/g,'')
       .replace('auth/user-not-found','No account with that email')
       .replace('auth/invalid-email','Enter a valid email')
+      .replace('auth/unauthorized-domain','This domain is not authorized in Firebase Authentication settings')
       .trim();
-    errEl.textContent = msg || 'Password reset failed. Please try again.';
+    setAuthMessage(msg || 'Password reset failed. Please try again.');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = oldText || 'forgot password?'; }
   }
 }
+window.sendPasswordReset = sendPasswordReset;
+function bindForgotPasswordButton() {
+  const btn = document.getElementById('forgot-password-btn');
+  if (btn) btn.addEventListener('click', sendPasswordReset);
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindForgotPasswordButton);
+else bindForgotPasswordButton();
 function doSignOut() {
   if (!confirm('sign out?')) return;
   // reset in-memory state for next user
