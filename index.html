@@ -7,13 +7,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="RoutineOS">
-<link rel="manifest" href="manifest.webmanifest?v=pro29">
+<link rel="manifest" href="manifest.webmanifest?v=pro30">
 <title>RoutineOS</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<script type="module" src="js/auth.js?v=pro29"></script>
-<link rel="stylesheet" href="css/styles.css?v=pro29">
+<script type="module" src="js/auth.js?v=pro30"></script>
+<link rel="stylesheet" href="css/styles.css?v=pro30">
 </head>
 <body>
 
@@ -75,6 +75,7 @@
     <div style="margin-bottom:12px">
       <label style="font-size:12px;color:var(--txt2);display:block;margin-bottom:4px">password</label>
       <input type="password" id="auth-pass" placeholder="min 6 characters" style="width:100%;padding:9px 12px;border-radius:var(--r);border:.5px solid var(--bdrm);background:var(--bg2);font-size:13px;color:var(--txt);font-family:var(--font)" onkeydown="if(event.key==='Enter')doAuth()">
+      <button id="forgot-password-btn" onclick="sendPasswordReset()" style="display:block;margin:7px 0 0 auto;border:none;background:transparent;color:var(--teal);font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);padding:0">forgot password?</button>
     </div>
     <button id="auth-submit-btn" onclick="doAuth()" style="width:100%;padding:10px;border-radius:var(--r);border:none;background:var(--teal);color:#fff;font-size:14px;font-weight:600;cursor:pointer;margin-top:4px;font-family:var(--font)">sign in</button>
     <div id="auth-error" style="font-size:12px;color:var(--red);margin-top:8px;text-align:center;min-height:18px"></div>
@@ -311,6 +312,7 @@
   <!-- Add food entry -->
   <div class="aform">
     <h3><i class="ti ti-salad" style="color:var(--amb)"></i> log food</h3>
+    <div class="water-card" id="water-widget"></div>
     <div class="meal-type-tabs" id="meal-type-tabs">
       <button class="meal-tab active" onclick="setMealType('breakfast',this)"><i class="ti ti-sunrise"></i> Breakfast</button>
       <button class="meal-tab" onclick="setMealType('lunch',this)"><i class="ti ti-sun-high"></i> Lunch</button>
@@ -456,18 +458,18 @@
   <button class="bnav-btn"        onclick="showView('reports')"  id="bn-reports"> <i class="ti ti-chart-bar"></i>reports</button>
 </nav>
 
-<script src="js/core.js?v=pro29"></script>
-<script src="js/dashboard.js?v=pro29"></script>
-<script src="js/today.js?v=pro29"></script>
-<script src="js/work-summary-coach.js?v=pro29"></script>
-<script src="js/reports.js?v=pro29"></script>
-<script src="js/schedule-import.js?v=pro29"></script>
-<script src="js/auth-ui.js?v=pro29"></script>
-<script src="js/data.js?v=pro29"></script>
-<script src="js/meals.js?v=pro29"></script>
-<script src="js/exercise.js?v=pro29"></script>
-<script src="js/settings-reports.js?v=pro29"></script>
-<script src="js/professional.js?v=pro29"></script>
-<script src="js/boot.js?v=pro29"></script>
+<script src="js/core.js?v=pro30"></script>
+<script src="js/dashboard.js?v=pro30"></script>
+<script src="js/today.js?v=pro30"></script>
+<script src="js/work-summary-coach.js?v=pro30"></script>
+<script src="js/reports.js?v=pro30"></script>
+<script src="js/schedule-import.js?v=pro30"></script>
+<script src="js/auth-ui.js?v=pro30"></script>
+<script src="js/data.js?v=pro30"></script>
+<script src="js/meals.js?v=pro30"></script>
+<script src="js/exercise.js?v=pro30"></script>
+<script src="js/settings-reports.js?v=pro30"></script>
+<script src="js/professional.js?v=pro30"></script>
+<script src="js/boot.js?v=pro30"></script>
 </body>
 </html>

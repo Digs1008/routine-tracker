@@ -1,12 +1,12 @@
-const CACHE = 'routineos-pro29';
+const CACHE = 'routineos-pro30';
 const ASSETS = [
-  './index.html?v=pro29',
-  './css/styles.css?v=pro29',
-  './js/core.js?v=pro29',
-  './js/dashboard.js?v=pro29',
-  './js/meals.js?v=pro29',
-  './js/exercise.js?v=pro29',
-  './js/professional.js?v=pro29'
+  './index.html?v=pro30',
+  './css/styles.css?v=pro30',
+  './js/core.js?v=pro30',
+  './js/dashboard.js?v=pro30',
+  './js/meals.js?v=pro30',
+  './js/exercise.js?v=pro30',
+  './js/professional.js?v=pro30'
 ];
 
 self.addEventListener('install', event => {
