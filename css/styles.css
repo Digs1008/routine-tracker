@@ -4346,3 +4346,383 @@ button{font-weight:600}
     font-size:46px;
   }
 }
+
+/* ── Mobile app shell: final responsive safety layer ────────────── */
+@media(max-width:979px){
+  html,
+  body{
+    width:100%;
+    overflow-x:hidden;
+  }
+  body{
+    display:block;
+    background:var(--bg3);
+  }
+  .topbar{
+    position:sticky!important;
+    top:0!important;
+    left:0!important;
+    right:0!important;
+    bottom:auto!important;
+    width:100%!important;
+    min-height:58px!important;
+    border-radius:0!important;
+    border-width:0 0 1px!important;
+    padding:8px 12px!important;
+    background:var(--bg)!important;
+    backdrop-filter:none!important;
+    box-shadow:0 1px 0 rgba(10,20,15,.06)!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:space-between!important;
+    gap:8px!important;
+  }
+  .topbar-title{
+    display:flex!important;
+    grid-template-columns:none!important;
+    align-items:center!important;
+    gap:7px!important;
+    min-width:0!important;
+    margin:0!important;
+    color:var(--ink)!important;
+  }
+  .topbar-title i{
+    grid-row:auto!important;
+    font-size:22px!important;
+    color:var(--teal)!important;
+  }
+  .topbar-title span{
+    color:var(--ink)!important;
+    font-size:16px!important;
+    line-height:1!important;
+    white-space:nowrap;
+  }
+  .topbar-title small{
+    display:none!important;
+  }
+  .topbar>div:last-child{
+    display:flex!important;
+    flex-direction:row!important;
+    align-items:center!important;
+    justify-content:flex-end!important;
+    gap:6px!important;
+    flex:0 1 auto!important;
+    min-height:auto!important;
+    min-width:0!important;
+  }
+  .desktop-tabs{
+    display:none!important;
+  }
+  #install-app-btn,
+  #onboarding-open-btn,
+  #signin-open-btn{
+    width:36px!important;
+    height:36px!important;
+    min-width:36px!important;
+    padding:0!important;
+    justify-content:center!important;
+    font-size:0!important;
+    border-radius:12px!important;
+  }
+  #install-app-btn i,
+  #onboarding-open-btn i,
+  #signin-open-btn i{
+    font-size:17px!important;
+  }
+  .user-badge{
+    gap:5px!important;
+  }
+  .user-name{
+    display:none!important;
+  }
+  .signout-btn{
+    width:32px!important;
+    height:32px!important;
+    padding:0!important;
+    font-size:0!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    border-radius:10px!important;
+  }
+  .signout-btn i{
+    font-size:14px!important;
+  }
+  .bottom-nav{
+    display:flex!important;
+    overflow-x:auto!important;
+    justify-content:flex-start!important;
+    gap:0!important;
+    padding:5px 4px calc(5px + var(--safe))!important;
+    background:var(--bg)!important;
+    box-shadow:0 -1px 0 rgba(10,20,15,.08)!important;
+    -webkit-overflow-scrolling:touch;
+  }
+  .bottom-nav::-webkit-scrollbar{
+    display:none;
+  }
+  .bnav-btn{
+    flex:0 0 68px!important;
+    min-width:68px!important;
+    min-height:50px!important;
+    padding:6px 4px!important;
+    font-size:10px!important;
+    border-radius:12px!important;
+  }
+  .bnav-btn.active{
+    background:var(--tl);
+  }
+  .view{
+    display:none!important;
+    margin-left:0!important;
+    width:100%!important;
+    max-width:none!important;
+    padding:14px 12px calc(84px + var(--safe))!important;
+  }
+  .view.active{
+    display:block!important;
+  }
+  .card,
+  .aform,
+  .summary-block,
+  .ai-card,
+  .todo-mini-card,
+  .upload-zone,
+  .fguide{
+    border-radius:16px!important;
+    padding:14px!important;
+    margin-bottom:12px!important;
+  }
+  .page-head,
+  .today-page-head,
+  .dated-page-head{
+    display:grid!important;
+    grid-template-columns:42px minmax(0,1fr)!important;
+    gap:10px!important;
+    align-items:start!important;
+    padding:14px!important;
+    border-radius:18px!important;
+    margin-bottom:12px!important;
+  }
+  .page-icon{
+    width:42px!important;
+    height:42px!important;
+    border-radius:14px!important;
+  }
+  .page-head h1,
+  .today-head-copy h1,
+  .dated-head-copy h1{
+    font-size:23px!important;
+    line-height:1.05!important;
+  }
+  .page-head p,
+  .today-head-copy p,
+  .dated-head-copy p{
+    display:none!important;
+  }
+  .today-head-copy,
+  .dated-head-copy{
+    min-width:0!important;
+  }
+  .date-label,
+  .today-head-date,
+  .dated-head-date{
+    margin-top:4px!important;
+    font-size:12px!important;
+    white-space:normal!important;
+  }
+  .date-nav,
+  .today-head-nav,
+  .dated-head-nav{
+    grid-column:1 / -1!important;
+    width:100%!important;
+    justify-content:space-between!important;
+    margin-top:8px!important;
+  }
+  .date-nav button{
+    width:38px!important;
+    height:34px!important;
+  }
+  .today-btn{
+    min-width:92px!important;
+    height:34px!important;
+  }
+  #view-home.view.active,
+  #view-today.view.active,
+  #view-meals.view.active,
+  #view-exercise.view.active,
+  #view-work.view.active,
+  #view-summary.view.active,
+  #view-coach.view.active,
+  #view-reports.view.active,
+  #view-schedule.view.active,
+  #view-import.view.active{
+    display:grid!important;
+    grid-template-columns:1fr!important;
+    gap:12px!important;
+    align-items:start!important;
+  }
+  #view-home>*,
+  #view-today>*,
+  #view-meals>*,
+  #view-exercise>*,
+  #view-work>*,
+  #view-summary>*,
+  #view-coach>*,
+  #view-reports>*,
+  #view-schedule>*,
+  #view-import>*{
+    grid-column:1!important;
+    grid-row:auto!important;
+    min-width:0!important;
+  }
+  #view-meals .aform,
+  #view-exercise .aform,
+  #view-work #work-form,
+  #view-meals .meals-log-panel,
+  #view-exercise .exercise-log-panel,
+  #view-work .work-log-panel{
+    position:static!important;
+    top:auto!important;
+    width:100%!important;
+  }
+  .metrics-row,
+  .daily-nutrition,
+  .ring-grid,
+  .review-metric-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:8px!important;
+  }
+  .hero-stack,
+  .insight-grid,
+  .report-grid,
+  .review-hero,
+  .review-grid,
+  .review-evidence-grid,
+  #meal-entries,
+  #exercise-entries,
+  #work-entries,
+  #schedule-list,
+  #today-list{
+    grid-template-columns:1fr!important;
+  }
+  .macro-preview{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  }
+  .fr,
+  .fr.t,
+  .fr.f,
+  .onboarding-grid{
+    grid-template-columns:1fr!important;
+  }
+  .meal-type-tabs,
+  .cat-filter,
+  .toggle-row{
+    display:flex!important;
+    flex-wrap:nowrap!important;
+    overflow-x:auto!important;
+    gap:6px!important;
+    padding-bottom:4px!important;
+    -webkit-overflow-scrolling:touch;
+  }
+  .meal-type-tabs::-webkit-scrollbar,
+  .cat-filter::-webkit-scrollbar,
+  .toggle-row::-webkit-scrollbar{
+    display:none;
+  }
+  .meal-tab,
+  .cat-btn,
+  .tgl{
+    flex:0 0 auto;
+    min-height:36px!important;
+    white-space:nowrap;
+  }
+  .food-search-wrap,
+  .task-input-wrap{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) 44px!important;
+    align-items:stretch!important;
+  }
+  .qty-row{
+    display:grid!important;
+    grid-template-columns:44px minmax(0,1fr) minmax(0,1fr)!important;
+    gap:8px!important;
+  }
+  .water-glasses{
+    grid-template-columns:repeat(4,minmax(0,1fr))!important;
+  }
+  .water-actions{
+    grid-template-columns:1fr!important;
+  }
+  .meal-entry,
+  .exercise-entry,
+  .wlog-entry,
+  .ri{
+    margin-bottom:0!important;
+    border-radius:14px!important;
+  }
+  .meal-food-row,
+  .exercise-entry-main,
+  .wlog-header{
+    align-items:flex-start!important;
+    gap:8px!important;
+  }
+  .meal-food-name,
+  .exercise-entry .iname,
+  .wlog-task{
+    white-space:normal!important;
+    overflow:visible!important;
+    text-overflow:clip!important;
+  }
+  .meal-macros{
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  }
+  .review-score{
+    font-size:44px!important;
+  }
+  .review-panel{
+    min-height:0!important;
+  }
+  .onboarding-modal{
+    padding:12px!important;
+  }
+  .onboarding-panel{
+    width:100%!important;
+    max-height:calc(100vh - 24px)!important;
+    overflow:auto!important;
+    border-radius:18px!important;
+  }
+  #auth-screen{
+    padding:14px!important;
+  }
+  #auth-screen>div{
+    max-width:380px!important;
+    padding:22px 18px!important;
+    border-radius:18px!important;
+  }
+}
+
+@media(max-width:420px){
+  .view{
+    padding-left:10px!important;
+    padding-right:10px!important;
+  }
+  .topbar{
+    padding-left:10px!important;
+    padding-right:10px!important;
+  }
+  .topbar-title span{
+    font-size:15px!important;
+  }
+  .metrics-row,
+  .daily-nutrition,
+  .ring-grid,
+  .review-metric-grid,
+  .macro-preview{
+    grid-template-columns:1fr!important;
+  }
+  .bnav-btn{
+    flex-basis:64px!important;
+    min-width:64px!important;
+  }
+}
