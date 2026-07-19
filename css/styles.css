@@ -2034,6 +2034,94 @@ button{font-weight:600}
 .meal-type-tabs{
   margin-bottom:16px;
 }
+.water-card{
+  background:linear-gradient(135deg,var(--surface2),rgba(24,95,165,.08));
+  border:1px solid rgba(24,95,165,.18);
+  border-radius:16px;
+  padding:13px;
+  margin-bottom:14px;
+}
+.water-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:10px;
+}
+.water-label{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  color:var(--ink);
+  font-size:13px;
+  font-weight:800;
+}
+.water-label i{
+  color:var(--blu);
+}
+.water-head small{
+  display:block;
+  margin-top:3px;
+  color:var(--txt3);
+  font-size:11px;
+}
+.water-head strong{
+  white-space:nowrap;
+  font-size:14px;
+}
+.water-glasses{
+  display:grid;
+  grid-template-columns:repeat(8,minmax(0,1fr));
+  gap:6px;
+  margin-bottom:10px;
+}
+.water-glass{
+  min-width:0;
+  height:34px;
+  border-radius:10px;
+  border:1px solid var(--bdr);
+  background:var(--surface);
+  color:var(--txt3);
+  cursor:pointer;
+  transition:transform .15s ease,border-color .15s ease,background .15s ease,color .15s ease;
+}
+.water-glass:hover{
+  transform:translateY(-1px);
+  border-color:var(--blu);
+}
+.water-glass.on{
+  background:var(--bl);
+  border-color:rgba(24,95,165,.32);
+  color:var(--blu);
+}
+.water-actions{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:6px;
+  margin-bottom:10px;
+}
+.water-actions button{
+  min-height:32px;
+  border:1px solid var(--bdr);
+  border-radius:10px;
+  background:var(--surface);
+  color:var(--txt2);
+  font-size:11px;
+  font-weight:800;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:4px;
+}
+.water-actions button:hover:not(:disabled){
+  border-color:var(--blu);
+  color:var(--blu);
+}
+.water-actions button:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+}
 .meal-tab{
   min-height:42px;
 }
