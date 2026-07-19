@@ -1,0 +1,10 @@
+{
+  "name": "RoutineOS",
+  "short_name": "RoutineOS",
+  "description": "Daily routine, nutrition, exercise, and productivity tracker.",
+  "start_url": "index.html?v=pro29",
+  "display": "standalone",
+  "background_color": "#F7F8F6",
+  "theme_color": "#1D9E75",
+  "icons": []
+}
