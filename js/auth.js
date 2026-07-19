@@ -57,6 +57,9 @@ function hideAuthScreen() {
 
 function installLocalAuth() {
   window._saveToFirebase = () => {};
+  window._authResetPassword = async () => {
+    throw new Error('Password reset is available only when Firebase is online. Local device-only accounts cannot be reset by email.');
+  };
 
   window._authSignUp = async (email, pass, name) => {
     const profiles = JSON.parse(localStorage.getItem('rt_profiles') || '[]');
@@ -154,6 +157,7 @@ async function installFirebaseAuth() {
     await authMod.updateProfile(cred.user, { displayName: name });
   };
   window._authSignIn = (email, pass) => authMod.signInWithEmailAndPassword(auth, email, pass);
+  window._authResetPassword = email => authMod.sendPasswordResetEmail(auth, email);
   window._authSignOut = () => { if (unsub) { unsub(); unsub = null; } authMod.signOut(auth); };
 }
 

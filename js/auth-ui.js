@@ -64,6 +64,38 @@ async function doAuth() {
     btn.textContent = label; btn.disabled = false;
   }
 }
+async function sendPasswordReset() {
+  const email = document.getElementById('auth-email').value.trim();
+  const errEl = document.getElementById('auth-error');
+  const btn = document.getElementById('forgot-password-btn');
+  errEl.textContent = '';
+  if (!email) {
+    errEl.textContent = 'Enter your email first, then tap forgot password.';
+    return;
+  }
+  if (!window._authResetPassword) {
+    errEl.textContent = 'App still loading, please wait a moment and try again.';
+    return;
+  }
+  const oldText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'sending...'; }
+  try {
+    await window._authResetPassword(email);
+    errEl.style.color = 'var(--teal)';
+    errEl.textContent = 'Password reset email sent. Check your inbox.';
+  } catch(e) {
+    errEl.style.color = 'var(--red)';
+    const msg = (e.message||'Password reset failed')
+      .replace('Firebase: ','')
+      .replace(/\(auth\/[^)]+\)/g,'')
+      .replace('auth/user-not-found','No account with that email')
+      .replace('auth/invalid-email','Enter a valid email')
+      .trim();
+    errEl.textContent = msg || 'Password reset failed. Please try again.';
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = oldText || 'forgot password?'; }
+  }
+}
 function doSignOut() {
   if (!confirm('sign out?')) return;
   // reset in-memory state for next user

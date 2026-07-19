@@ -183,19 +183,23 @@ function renderWaterWidget() {
   const el     = document.getElementById('water-widget');
   if (!el) return;
   const glasses = Array.from({ length: target }, (_, i) =>
-    `<div onclick="addWater(${i < done ? -1 : 1})" style="width:28px;height:36px;border-radius:4px 4px 6px 6px;
-     border:1.5px solid ${i < done ? 'var(--blu)' : 'var(--bdr)'};
-     background:${i < done ? 'var(--bl)' : 'transparent'};
-     cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;font-size:14px"
-     title="${i < done ? 'tap to remove' : 'tap to add'}">
-     ${i < done ? '💧' : '○'}
-    </div>`).join('');
+    `<button class="water-glass ${i < done ? 'on' : ''}" onclick="addWater(${i < done ? -1 : 1})" title="${i < done ? 'tap to remove one glass' : 'tap to add one glass'}">
+      <i class="ti ${i < done ? 'ti-droplet-filled' : 'ti-droplet'}"></i>
+    </button>`).join('');
   el.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-      <span style="font-size:13px;font-weight:600">💧 water intake</span>
-      <span style="font-size:13px;font-weight:600;color:${pct>=100?'var(--teal)':'var(--blu)'}">${done} / ${target} glasses</span>
+    <div class="water-head">
+      <div>
+        <span class="water-label"><i class="ti ti-droplet"></i> water intake</span>
+        <small>${pct>=100?'Target complete':'Tap glasses or use quick add'}</small>
+      </div>
+      <strong style="color:${pct>=100?'var(--teal)':'var(--blu)'}">${done} / ${target}</strong>
     </div>
-    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">${glasses}</div>
+    <div class="water-glasses">${glasses}</div>
+    <div class="water-actions">
+      <button onclick="addWater(-1)" ${done<=0?'disabled':''}><i class="ti ti-minus"></i> remove</button>
+      <button onclick="addWater(1)"><i class="ti ti-plus"></i> add glass</button>
+      <button onclick="addWater(2)"><i class="ti ti-plus"></i> add 2</button>
+    </div>
     <div class="dn-bar"><div class="dn-bar-fill" style="width:${pct}%;background:var(--blu)"></div></div>`;
 }
 
