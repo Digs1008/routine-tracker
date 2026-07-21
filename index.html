@@ -7,13 +7,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="RoutineOS">
-<link rel="manifest" href="manifest.webmanifest?v=pro31">
+<link rel="manifest" href="manifest.webmanifest?v=pro41">
 <title>RoutineOS</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<script type="module" src="js/auth.js?v=pro31"></script>
-<link rel="stylesheet" href="css/styles.css?v=pro31">
+<script type="module" src="js/auth.js?v=pro41"></script>
+<link rel="stylesheet" href="css/styles.css?v=pro41">
 </head>
 <body>
 
@@ -78,6 +78,7 @@
       <button type="button" id="forgot-password-btn" style="display:block;margin:7px 0 0 auto;border:none;background:transparent;color:var(--teal);font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);padding:0">forgot password?</button>
     </div>
     <button id="auth-submit-btn" onclick="doAuth()" style="width:100%;padding:10px;border-radius:var(--r);border:none;background:var(--teal);color:#fff;font-size:14px;font-weight:600;cursor:pointer;margin-top:4px;font-family:var(--font)">sign in</button>
+    <button id="guest-mode-btn" onclick="continueAsGuest()" style="width:100%;padding:10px;border-radius:var(--r);border:.5px solid var(--bdr);background:var(--bg2);color:var(--txt);font-size:13px;font-weight:700;cursor:pointer;margin-top:8px;font-family:var(--font);display:flex;align-items:center;justify-content:center;gap:7px"><i class="ti ti-user"></i> continue as guest</button>
     <div id="auth-error" style="font-size:12px;color:var(--red);margin-top:8px;text-align:center;min-height:18px"></div>
     <div id="auth-offline-note" style="font-size:11px;color:var(--txt3);text-align:center;margin-top:12px;line-height:1.5"></div>
   </div>
@@ -458,18 +459,18 @@
   <button class="bnav-btn"        onclick="showView('reports')"  id="bn-reports"> <i class="ti ti-chart-bar"></i>reports</button>
 </nav>
 
-<script src="js/core.js?v=pro31"></script>
-<script src="js/dashboard.js?v=pro31"></script>
-<script src="js/today.js?v=pro31"></script>
-<script src="js/work-summary-coach.js?v=pro31"></script>
-<script src="js/reports.js?v=pro31"></script>
-<script src="js/schedule-import.js?v=pro31"></script>
-<script src="js/auth-ui.js?v=pro31"></script>
-<script src="js/data.js?v=pro31"></script>
-<script src="js/meals.js?v=pro31"></script>
-<script src="js/exercise.js?v=pro31"></script>
-<script src="js/settings-reports.js?v=pro31"></script>
-<script src="js/professional.js?v=pro31"></script>
-<script src="js/boot.js?v=pro31"></script>
+<script src="js/core.js?v=pro41"></script>
+<script src="js/dashboard.js?v=pro41"></script>
+<script src="js/today.js?v=pro41"></script>
+<script src="js/work-summary-coach.js?v=pro41"></script>
+<script src="js/reports.js?v=pro41"></script>
+<script src="js/schedule-import.js?v=pro41"></script>
+<script src="js/auth-ui.js?v=pro41"></script>
+<script src="js/data.js?v=pro41"></script>
+<script src="js/meals.js?v=pro41"></script>
+<script src="js/exercise.js?v=pro41"></script>
+<script src="js/settings-reports.js?v=pro41"></script>
+<script src="js/professional.js?v=pro41"></script>
+<script src="js/boot.js?v=pro41"></script>
 </body>
 </html>
