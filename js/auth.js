@@ -15,6 +15,31 @@ window.FIREBASE_CONFIGURED = FIREBASE_CONFIGURED;
 window._firebaseInitDone = false;
 window._authBackend = 'local';
 
+function getOrCreateGuestUser() {
+  try {
+    const existing = localStorage.getItem('rt_guestUser');
+    if (existing) {
+      const parsed = JSON.parse(existing);
+      if (parsed && parsed.uid) return parsed;
+    }
+  } catch(e) {}
+  const suffix = Math.random().toString(36).slice(2, 8).toUpperCase();
+  const guest = {
+    uid: 'guest_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+    email: 'guest@local',
+    name: 'Guest ' + suffix,
+    isGuest: true
+  };
+  try { localStorage.setItem('rt_guestUser', JSON.stringify(guest)); } catch(e) {}
+  return guest;
+}
+
+function startGuestSession() {
+  window._currentUser = getOrCreateGuestUser();
+  try { localStorage.setItem('rt_activeUser', JSON.stringify(window._currentUser)); } catch(e) {}
+  hideAuthScreen();
+}
+
 function loadUserState() {
   const uid = window._currentUser?.uid;
   if (!uid) return;
@@ -46,7 +71,9 @@ function showAuthScreen() {
   if (su) { su.classList.remove('active'); su.style.background = 'transparent'; su.style.color = 'var(--txt2)'; }
   const nr = document.getElementById('auth-signup-name'); if (nr) nr.style.display = 'none';
   const note = document.getElementById('auth-offline-note');
-  if (note) note.textContent = window.FIREBASE_READY ? '' : 'Offline mode: accounts stored on this device only.';
+  if (note) note.textContent = window.FIREBASE_READY
+    ? 'Use an account for sync, or continue as guest for this device only.'
+    : 'Offline mode: accounts and guest data are stored on this device only.';
 }
 
 function hideAuthScreen() {
@@ -59,6 +86,7 @@ function hideAuthScreen() {
 
 function installLocalAuth() {
   window._saveToFirebase = () => {};
+  window._authContinueAsGuest = async () => startGuestSession();
   window._authResetPassword = async () => {
     throw new Error('Password reset is available only when Firebase is online. Local device-only accounts cannot be reset by email.');
   };
@@ -132,6 +160,10 @@ async function installFirebaseAuth() {
       });
       hideAuthScreen();
     } else {
+      if (window._currentUser?.isGuest) {
+        hideAuthScreen();
+        return;
+      }
       window._currentUser = null;
       localStorage.removeItem('rt_activeUser');
       if (unsub) { unsub(); unsub = null; }
@@ -142,6 +174,7 @@ async function installFirebaseAuth() {
 
   window._saveToFirebase = async () => {
     const user = auth.currentUser;
+    if (window._currentUser?.isGuest) return;
     if (!user) return;
     try {
       const ref = firestoreMod.doc(db, 'users', user.uid, 'data', 'main');
@@ -160,7 +193,18 @@ async function installFirebaseAuth() {
   };
   window._authSignIn = (email, pass) => authMod.signInWithEmailAndPassword(auth, email, pass);
   window._authResetPassword = email => authMod.sendPasswordResetEmail(auth, email);
-  window._authSignOut = () => { if (unsub) { unsub(); unsub = null; } authMod.signOut(auth); };
+  window._authContinueAsGuest = async () => startGuestSession();
+  window._authSignOut = () => {
+    if (unsub) { unsub(); unsub = null; }
+    if (window._currentUser?.isGuest && !auth.currentUser) {
+      window._currentUser = null;
+      localStorage.removeItem('rt_activeUser');
+      showAuthScreen();
+      updateUserBadge();
+      return;
+    }
+    authMod.signOut(auth);
+  };
 }
 
 function restoreLocalSession() {

@@ -113,6 +113,20 @@ async function sendPasswordReset() {
   }
 }
 window.sendPasswordReset = sendPasswordReset;
+async function continueAsGuest() {
+  setAuthMessage('Starting guest mode...', 'info');
+  if (!window._authContinueAsGuest) {
+    setAuthMessage('App still loading, please wait a moment and try again.');
+    return;
+  }
+  try {
+    await window._authContinueAsGuest();
+    showToast('Guest mode started. Your data stays on this device.');
+  } catch(e) {
+    setAuthMessage((e.message || 'Guest mode failed. Please try again.').trim());
+  }
+}
+window.continueAsGuest = continueAsGuest;
 function bindForgotPasswordButton() {
   const btn = document.getElementById('forgot-password-btn');
   if (btn) btn.addEventListener('click', sendPasswordReset);
@@ -120,7 +134,8 @@ function bindForgotPasswordButton() {
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindForgotPasswordButton);
 else bindForgotPasswordButton();
 function doSignOut() {
-  if (!confirm('sign out?')) return;
+  const isGuest = !!window._currentUser?.isGuest;
+  if (!confirm(isGuest ? 'leave guest mode?' : 'sign out?')) return;
   // reset in-memory state for next user
   state.items=[]; state.completions={}; state.workLogs={};
   state.mealLogs={}; state.exerciseLogs={}; state.bodyMetrics=[]; state.waterLog={};
@@ -133,12 +148,14 @@ function updateUserBadge() {
   const nameEl = document.getElementById('user-name-badge');
   const signinBtn = document.getElementById('signin-open-btn');
   if (!badge) return;
-  if (u && u.uid !== 'guest') {
+  if (u) {
     badge.style.display = 'flex';
-    if (signinBtn) signinBtn.style.display = 'none';
-    const initials = (u.name||u.email).split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    if (signinBtn) signinBtn.style.display = u.isGuest ? 'flex' : 'none';
+    const initials = u.isGuest ? 'G' : (u.name||u.email).split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
     avatar.textContent = initials;
-    if (nameEl) nameEl.textContent = u.name || u.email;
+    avatar.title = u.isGuest ? 'guest mode' : 'signed in';
+    avatar.style.background = u.isGuest ? 'var(--amb)' : 'var(--teal)';
+    if (nameEl) nameEl.textContent = u.isGuest ? 'Guest' : (u.name || u.email);
   } else {
     badge.style.display = 'none';
     if (signinBtn && typeof showAuthScreen === 'function') signinBtn.style.display = 'flex';
