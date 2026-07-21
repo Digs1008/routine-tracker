@@ -289,6 +289,13 @@ function mobileCornerMetric(cls, label, value, sub, target) {
     '<span>' + label + '</span><strong>' + value + '</strong><small>' + sub + '</small></button>';
 }
 
+function mobileMacroTile(label, value, target, suffix, color) {
+  const pct = pctValue(value, target);
+  return '<div class="mobile-macro-tile" style="--macro-color:' + color + '">' +
+    '<span>' + label + '</span><strong>' + Math.round(value) + suffix + '</strong>' +
+    '<small>' + pct + '% target</small><div><b style="width:' + pct + '%"></b></div></div>';
+}
+
 function renderMobileHome(m) {
   const net = Math.round(m.nutrition.cal - m.exercise.calories);
   const proteinPct = pctValue(m.nutrition.protein, m.proteinTarget);
@@ -318,9 +325,11 @@ function renderMobileHome(m) {
 
   document.getElementById('badge-strip').innerHTML =
     '<div class="mobile-module mobile-nutrition-module"><div class="mobile-module-head"><span>Nutrition</span><button onclick="showView(&quot;meals&quot;)">Meals</button></div>' +
-      '<div class="mobile-progress-pair">' +
-        progressLine('Calories', m.nutrition.cal, m.calTarget, '#f59e0b', '') +
-        progressLine('Protein', m.nutrition.protein, m.proteinTarget, '#2563eb', 'g') +
+      '<div class="mobile-macro-grid">' +
+        mobileMacroTile('Calories', m.nutrition.cal, m.calTarget, '', '#f59e0b') +
+        mobileMacroTile('Protein', m.nutrition.protein, m.proteinTarget, 'g', '#2563eb') +
+        mobileMacroTile('Carbs', m.nutrition.carbs, Math.round(m.calTarget * 0.45 / 4), 'g', '#d97706') +
+        mobileMacroTile('Fat', m.nutrition.fat, Math.round(m.calTarget * 0.25 / 9), 'g', '#dc2626') +
       '</div></div>' +
     '<div class="mobile-module mobile-trend-module"><div class="mobile-module-head"><span>7-day trend</span><strong>' + m.streak + 'd streak</strong></div>' + weekTrendHtml() + '</div>';
 
