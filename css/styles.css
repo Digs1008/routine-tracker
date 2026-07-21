@@ -5325,3 +5325,169 @@ button{font-weight:600}
     font-size:8px;
   }
 }
+
+/* ── Mobile compact metric panels: Today, Meals, Exercise, Summary ─ */
+@media(max-width:700px){
+  #view-today .today-overview{
+    grid-template-columns:92px minmax(0,1fr)!important;
+    gap:10px!important;
+    padding:12px!important;
+    border-radius:18px!important;
+    align-items:stretch!important;
+  }
+  #view-today .today-progress-ring{
+    width:88px!important;
+    height:88px!important;
+    margin:0!important;
+    align-self:center!important;
+  }
+  #view-today .today-progress-ring::after{
+    inset:10px!important;
+  }
+  #view-today .today-progress-ring strong{
+    font-size:24px!important;
+    letter-spacing:0!important;
+  }
+  #view-today .today-progress-ring span{
+    font-size:8px!important;
+    margin-top:3px!important;
+  }
+  #view-today .today-stat-grid{
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+    gap:6px!important;
+  }
+  #view-today .today-stat{
+    min-height:70px!important;
+    border-radius:12px!important;
+    padding:8px 7px!important;
+  }
+  #view-today .today-stat span{
+    font-size:8px!important;
+    letter-spacing:.05em!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+  #view-today .today-stat strong{
+    font-size:22px!important;
+    letter-spacing:0!important;
+  }
+  #view-today .today-stat b{
+    height:4px!important;
+  }
+  #view-meals .daily-nutrition,
+  #view-exercise .metrics-row,
+  #view-summary .review-metric-grid{
+    display:grid!important;
+    grid-template-columns:repeat(4,minmax(0,1fr))!important;
+    gap:7px!important;
+  }
+  #view-meals .dn-card,
+  #view-exercise .mc,
+  #view-summary .review-metric{
+    min-width:0!important;
+    min-height:72px!important;
+    border-radius:13px!important;
+    padding:8px 7px!important;
+    display:flex!important;
+    flex-direction:column!important;
+    justify-content:space-between!important;
+    text-align:left!important;
+    overflow:hidden!important;
+  }
+  #view-meals .dn-label,
+  #view-exercise .mc .ml,
+  #view-summary .review-metric span{
+    font-size:8px!important;
+    line-height:1.1!important;
+    font-weight:850!important;
+    letter-spacing:.05em!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+  #view-meals .dn-val,
+  #view-exercise .mc .mv,
+  #view-summary .review-metric strong{
+    font-size:18px!important;
+    line-height:1!important;
+    font-weight:900!important;
+    letter-spacing:0!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+  #view-meals .dn-target,
+  #view-summary .review-metric small{
+    font-size:8px!important;
+    line-height:1.15!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+  #view-meals .dn-bar{
+    height:4px!important;
+    margin-top:4px!important;
+  }
+  #view-summary .review-hero{
+    grid-template-columns:94px minmax(0,1fr)!important;
+    gap:12px!important;
+    align-items:center!important;
+  }
+  #view-summary .review-score{
+    font-size:38px!important;
+    letter-spacing:0!important;
+  }
+  #view-summary .review-score-label{
+    font-size:11px!important;
+  }
+  #view-summary .review-hero-copy h3{
+    margin-bottom:0!important;
+    font-size:14px!important;
+  }
+  #view-summary .review-hero-copy p{
+    display:none!important;
+  }
+}
+
+@media(max-width:360px){
+  #view-today .today-overview{
+    grid-template-columns:82px minmax(0,1fr)!important;
+    gap:8px!important;
+  }
+  #view-today .today-progress-ring{
+    width:78px!important;
+    height:78px!important;
+  }
+  #view-today .today-progress-ring strong{
+    font-size:21px!important;
+  }
+  #view-today .today-stat{
+    min-height:64px!important;
+    padding:7px 5px!important;
+  }
+  #view-today .today-stat strong,
+  #view-meals .dn-val,
+  #view-exercise .mc .mv,
+  #view-summary .review-metric strong{
+    font-size:16px!important;
+  }
+  #view-meals .daily-nutrition,
+  #view-exercise .metrics-row,
+  #view-summary .review-metric-grid{
+    gap:5px!important;
+  }
+  #view-meals .dn-card,
+  #view-exercise .mc,
+  #view-summary .review-metric{
+    min-height:66px!important;
+    padding:7px 5px!important;
+    border-radius:11px!important;
+  }
+  #view-summary .review-hero{
+    grid-template-columns:82px minmax(0,1fr)!important;
+  }
+  #view-summary .review-score{
+    font-size:32px!important;
+  }
+}
