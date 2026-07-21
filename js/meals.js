@@ -444,6 +444,33 @@ function deleteMealEntry(d,id){
 }
 
 // ── Render meal view ──
+function mealMetricStatus(label, value, target) {
+  const pct = target ? value / target * 100 : 0;
+  if (label === 'protein') return pct >= 90 ? 'good' : pct >= 60 ? 'watch' : 'low';
+  if (label === 'calories') return pct > 110 ? 'over' : pct >= 75 ? 'good' : 'watch';
+  return pct > 105 ? 'over' : pct >= 65 ? 'good' : 'watch';
+}
+
+function mealHealthSignal(e) {
+  const name = (e.name || '').toLowerCase();
+  const cal = Number(e.cal) || 0;
+  const protein = Number(e.protein) || 0;
+  const fat = Number(e.fat) || 0;
+  const carbs = Number(e.carbs) || 0;
+  const unhealthyWords = ['fried', 'samosa', 'kachori', 'pakoda', 'puri', 'bhatura', 'jalebi', 'ice cream', 'butter', 'sweet'];
+  const healthyWords = ['dal', 'chilla', 'yogurt', 'curd', 'paneer', 'tofu', 'salad', 'sprouts', 'oats', 'daliya', 'egg', 'chicken breast', 'fish'];
+  const proteinDensity = cal ? protein * 4 / cal : 0;
+  const fatDensity = cal ? fat * 9 / cal : 0;
+
+  if (unhealthyWords.some(w => name.includes(w)) || (cal >= 450 && proteinDensity < .14) || fatDensity > .45) {
+    return { cls: 'health-bad', icon: 'ti-alert-triangle', label: 'heavy' };
+  }
+  if (healthyWords.some(w => name.includes(w)) || proteinDensity >= .22 || (cal <= 220 && protein >= 8) || (carbs >= 0 && fat <= 5 && cal <= 180)) {
+    return { cls: 'health-good', icon: 'ti-circle-check', label: 'good' };
+  }
+  return { cls: 'health-neutral', icon: 'ti-minus', label: 'ok' };
+}
+
 function renderMeals(){
   const d=state.mealDate;
   const s=getSettings();
@@ -461,9 +488,11 @@ function renderMeals(){
     {lbl:'fat',     val:totals.fat.toFixed(1),    target:s.fatTarget,    unit:'g',color:'#D85A30'},
   ];
   document.getElementById('daily-nutrition').innerHTML=nn.map(n=>{
-    const pct=Math.min(Math.round((n.val/n.target)*100),100);
-    const over=n.val>n.target;
-    return `<div class="dn-card">
+    const numericVal=parseFloat(n.val)||0;
+    const pct=Math.min(Math.round((numericVal/(n.target||1))*100),100);
+    const over=numericVal>n.target;
+    const status=mealMetricStatus(n.lbl,numericVal,n.target);
+    return `<div class="dn-card dn-${status}" style="--metric-color:${over?'var(--red)':n.color}">
       <div class="dn-label">${n.lbl}</div>
       <div class="dn-val" style="color:${over?'var(--red)':n.color}">${n.val}</div>
       <div class="dn-target">${n.unit} / ${n.target} target</div>
@@ -493,8 +522,10 @@ function renderMeals(){
         <span style="font-size:12px;color:var(--amb);font-weight:600">${Math.round(mtot.cal)} kcal</span>
       </div>
       <div class="meal-foods">
-        ${es.map(e=>`
-          <div class="meal-food-row">
+        ${es.map(e=>{
+          const signal=mealHealthSignal(e);
+          return `
+          <div class="meal-food-row ${signal.cls}">
             <div style="display:flex;align-items:center;gap:6px">
               <button onclick="deleteMealEntry('${d}','${e.id}')" style="width:20px;height:20px;border-radius:50%;border:.5px solid var(--bdr);background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0" title="remove">
                 <i class="ti ti-x" style="font-size:10px;color:var(--txt3)"></i>
@@ -502,12 +533,13 @@ function renderMeals(){
               <span class="meal-food-name">${esc(e.name)} <span style="color:var(--txt3)">${e.qty} ${e.unit}</span></span>
             </div>
             <span class="meal-food-cal">${e.cal} kcal</span>
-          </div>`).join('')}
+            <span class="meal-health-chip"><i class="ti ${signal.icon}"></i>${signal.label}</span>
+          </div>`}).join('')}
       </div>
       <div class="meal-macros">
-        <div class="mm"><span style="color:var(--teal)">${mtot.protein.toFixed(1)}g</span> protein</div>
-        <div class="mm"><span style="color:var(--blu)">${mtot.carbs.toFixed(1)}g</span> carbs</div>
-        <div class="mm"><span style="color:var(--cor)">${mtot.fat.toFixed(1)}g</span> fat</div>
+        <div class="mm"><span style="color:var(--teal)">${mtot.protein.toFixed(1)}g</span><small>protein</small></div>
+        <div class="mm"><span style="color:var(--blu)">${mtot.carbs.toFixed(1)}g</span><small>carbs</small></div>
+        <div class="mm"><span style="color:var(--cor)">${mtot.fat.toFixed(1)}g</span><small>fat</small></div>
       </div>
     </div>`;
   }).join('');
