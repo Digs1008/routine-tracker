@@ -124,6 +124,10 @@ function waterSegmentsHtml(value, target) {
     Array.from({ length: total }, (_, i) => '<b class="' + (i < filled ? 'on' : '') + '"></b>').join('') + '</div>';
 }
 
+function isCompactMobile() {
+  return !!(window.matchMedia && window.matchMedia('(max-width: 700px)').matches);
+}
+
 function macroDonutHtml(nutrition, calTarget) {
   const proteinCal = Math.max(0, nutrition.protein || 0) * 4;
   const carbCal = Math.max(0, nutrition.carbs || 0) * 4;
@@ -217,6 +221,11 @@ function questPanelHtml(metrics) {
 function renderHome() {
   const m = getHomeMetrics();
   m.unlockedRewards = unlockRewards(m);
+  if (isCompactMobile()) return renderMobileHome(m);
+  return renderDesktopHome(m);
+}
+
+function renderDesktopHome(m) {
   const name = window._currentUser?.name ? esc(window._currentUser.name.split(' ')[0]) : 'Guest';
   const net = Math.round(m.nutrition.cal - m.exercise.calories);
   const proteinPct = pctValue(m.nutrition.protein, m.proteinTarget);
@@ -272,8 +281,91 @@ function renderHome() {
     waterTarget: m.waterTarget,
     exerciseMin: m.exerciseMin,
     mealCount: m.mealCount
-  });
+    });
 };
+
+function mobileCornerMetric(cls, label, value, sub, target) {
+  return '<button class="mobile-corner ' + cls + '" onclick="showView(&quot;' + target + '&quot;)">' +
+    '<span>' + label + '</span><strong>' + value + '</strong><small>' + sub + '</small></button>';
+}
+
+function renderMobileHome(m) {
+  const net = Math.round(m.nutrition.cal - m.exercise.calories);
+  const proteinPct = pctValue(m.nutrition.protein, m.proteinTarget);
+  const caloriesPct = pctValue(m.nutrition.cal, m.calTarget);
+  const exercisePct = pctValue(m.exercise.minutes, m.exerciseTarget);
+  const waterPct = pctValue(m.water, m.waterTarget);
+  const pending = m.routine.all.filter(i => !isCompleted(i.id, m.today)).slice(0, 3);
+  const unlockedCount = m.unlockedRewards.length;
+
+  document.getElementById('hero-card').innerHTML =
+    '<div class="mobile-score-card">' +
+      '<div class="mobile-score-center">' +
+        ringSVG(m.readiness, '#34d399') +
+        '<div><strong>' + m.readiness + '</strong><span>score</span></div>' +
+      '</div>' +
+      mobileCornerMetric('tl', 'Calories', m.calorieRemaining, 'remaining', 'meals') +
+      mobileCornerMetric('tr', 'Protein', Math.round(m.nutrition.protein) + 'g', proteinPct + '% target', 'meals') +
+      mobileCornerMetric('bl', 'Water', m.water + '/' + m.waterTarget, waterPct + '% target', 'meals') +
+      mobileCornerMetric('br', 'Move', Math.round(m.exercise.minutes) + 'm', exercisePct + '% goal', 'exercise') +
+    '</div>';
+
+  document.getElementById('ring-grid').innerHTML =
+    '<div class="mobile-module mobile-next-module"><div class="mobile-module-head"><span>Next up</span><button onclick="showView(&quot;today&quot;)">Today</button></div>' +
+      '<div class="mobile-chip-row">' + (pending.length ? pending.map(it =>
+        '<button class="mobile-task-chip" onclick="showView(&quot;today&quot;)"><i class="ti ti-circle"></i><span>' + esc(it.name) + '</span>' + (it.time ? '<small>' + esc(it.time) + '</small>' : '') + '</button>'
+      ).join('') : '<div class="mobile-empty-line">All clear for now.</div>') + '</div></div>';
+
+  document.getElementById('badge-strip').innerHTML =
+    '<div class="mobile-module mobile-nutrition-module"><div class="mobile-module-head"><span>Nutrition</span><button onclick="showView(&quot;meals&quot;)">Meals</button></div>' +
+      '<div class="mobile-progress-pair">' +
+        progressLine('Calories', m.nutrition.cal, m.calTarget, '#f59e0b', '') +
+        progressLine('Protein', m.nutrition.protein, m.proteinTarget, '#2563eb', 'g') +
+      '</div></div>' +
+    '<div class="mobile-module mobile-trend-module"><div class="mobile-module-head"><span>7-day trend</span><strong>' + m.streak + 'd streak</strong></div>' + weekTrendHtml() + '</div>';
+
+  document.getElementById('quest-card').style.display = 'none';
+  document.getElementById('quest-card').innerHTML = '';
+
+  const achievementWrap = document.querySelector('#view-home .todo-mini-card');
+  if (achievementWrap) achievementWrap.style.display = 'block';
+  const rewardCount = document.getElementById('todo-mini-count');
+  if (rewardCount) rewardCount.textContent = unlockedCount + '/' + REWARD_DEFS.length;
+  const rewardTitle = document.querySelector('#view-home .todo-mini-hdr h4');
+  if (rewardTitle) rewardTitle.innerHTML = '<i class="ti ti-award" style="margin-right:5px;color:var(--teal)"></i>achievements';
+  document.getElementById('todo-mini-list').innerHTML =
+    '<div class="mobile-achievement-summary">' + REWARD_DEFS.slice(0, 4).map(r => {
+      const on = m.unlockedRewards.includes(r.id);
+      return '<div class="' + (on ? 'on' : '') + '"><i class="ti ' + r.icon + '"></i><span>' + esc(r.name) + '</span></div>';
+    }).join('') + '</div>';
+
+  processXPForToday({
+    today: m.today,
+    todayAdh: m.todayAdh,
+    totalCount: m.totalCount,
+    waterDone: m.water,
+    waterTarget: m.waterTarget,
+    exerciseMin: m.exerciseMin,
+    mealCount: m.mealCount
+  });
+}
+
+let _lastHomeCompactMode = null;
+let _homeResizeTimer = null;
+function bindHomeResponsiveRenderer() {
+  if (!window.matchMedia) return;
+  _lastHomeCompactMode = isCompactMobile();
+  window.addEventListener('resize', () => {
+    clearTimeout(_homeResizeTimer);
+    _homeResizeTimer = setTimeout(() => {
+      const nextMode = isCompactMobile();
+      if (nextMode === _lastHomeCompactMode) return;
+      _lastHomeCompactMode = nextMode;
+      if (currentView === 'home') renderHome();
+    }, 160);
+  });
+}
+bindHomeResponsiveRenderer();
 
 function awardDailyActionXP(kind, amount, maxCount) {
   const key = 'rtActionXP_' + todayStr() + '_' + (window._currentUser?.uid || 'guest');
