@@ -914,6 +914,20 @@ button{font-weight:600}
   border-radius:13px!important;
   background:var(--ink)!important;
 }
+#guest-mode-btn{
+  min-height:44px;
+  border-radius:13px!important;
+  background:linear-gradient(135deg,var(--tl),var(--bl))!important;
+  color:var(--ink)!important;
+  border-color:rgba(29,158,117,.22)!important;
+}
+#guest-mode-btn:hover{
+  border-color:var(--teal)!important;
+  transform:translateY(-1px);
+}
+.user-badge .user-avatar[title="guest mode"]{
+  background:var(--amb)!important;
+}
 .auth-tab{
   min-height:38px;
 }
